@@ -20,7 +20,6 @@ interface User {
   companyId?: string;
   departmentId?: string;
   jobTitle?: string;
-  createdAt: string;
 }
 
 interface Company {

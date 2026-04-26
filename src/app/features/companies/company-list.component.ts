@@ -13,7 +13,6 @@ import { ApiService } from '../../core/services/api.service';
 interface Company {
   id: string;
   name: string;
-  description?: string;
 }
 
 @Component({
@@ -34,20 +33,19 @@ interface Company {
           <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
               <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr><th class="px-4 py-3">Nombre</th><th class="px-4 py-3">Descripcion</th><th class="px-4 py-3">Acciones</th></tr>
+                <tr><th class="px-4 py-3">Nombre</th><th class="px-4 py-3">Acciones</th></tr>
               </thead>
               <tbody>
                 @for (company of companies(); track company.id) {
                   <tr class="border-t border-slate-100">
                     <td class="px-4 py-3">{{ company.name }}</td>
-                    <td class="px-4 py-3 text-slate-600">{{ company.description || '-' }}</td>
                     <td class="px-4 py-3">
                       <button mat-icon-button (click)="openEdit(company)"><mat-icon>edit</mat-icon></button>
                       <button mat-icon-button color="warn" (click)="remove(company)"><mat-icon>delete</mat-icon></button>
                     </td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="3" class="px-4 py-10 text-center text-slate-400">No hay empresas</td></tr>
+                  <tr><td colspan="2" class="px-4 py-10 text-center text-slate-400">No hay empresas</td></tr>
                 }
               </tbody>
             </table>
@@ -60,7 +58,6 @@ interface Company {
           <mat-card class="w-full max-w-lg rounded-3xl p-6 shadow-2xl" (click)="$event.stopPropagation()">
             <h3 class="mb-4 text-xl font-semibold text-slate-900">{{ editId() ? 'Editar' : 'Nueva' }} empresa</h3>
             <mat-form-field appearance="outline" class="w-full"><mat-label>Nombre</mat-label><input matInput [(ngModel)]="form.name"></mat-form-field>
-            <mat-form-field appearance="outline" class="w-full"><mat-label>Descripcion</mat-label><textarea matInput rows="3" [(ngModel)]="form.description"></textarea></mat-form-field>
             <div class="mt-4 flex justify-end gap-2">
               <button mat-button (click)="showForm.set(false)">Cancelar</button>
               <button mat-flat-button color="primary" (click)="save()">Guardar</button>
@@ -78,12 +75,12 @@ export class CompanyListComponent implements OnInit {
   loading = signal(true);
   showForm = signal(false);
   editId = signal<string | null>(null);
-  form = { name: '', description: '' };
+  form = { name: '' };
 
   ngOnInit() { this.load(); }
   load() { this.api.get<Company[]>('/companies').subscribe({ next: v => { this.companies.set(v); this.loading.set(false); }, error: () => this.loading.set(false) }); }
-  openCreate() { this.editId.set(null); this.form = { name: '', description: '' }; this.showForm.set(true); }
-  openEdit(company: Company) { this.editId.set(company.id); this.form = { name: company.name, description: company.description || '' }; this.showForm.set(true); }
+  openCreate() { this.editId.set(null); this.form = { name: '' }; this.showForm.set(true); }
+  openEdit(company: Company) { this.editId.set(company.id); this.form = { name: company.name }; this.showForm.set(true); }
   save() {
     const req = this.editId() ? this.api.patch(`/companies/${this.editId()}`, this.form) : this.api.post('/companies', this.form);
     req.subscribe({ next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); }, error: (e) => this.snack.open(e.error?.message || 'Error', '', { duration: 3000 }) });

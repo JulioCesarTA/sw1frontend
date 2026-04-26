@@ -13,7 +13,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
 interface Company { id: string; name: string; }
-interface Department { id: string; companyId: string; name: string; description?: string; }
+interface Department { id: string; companyId: string; name: string; }
 
 @Component({
   selector: 'app-department-list',
@@ -33,21 +33,20 @@ interface Department { id: string; companyId: string; name: string; description?
           <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
               <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr><th class="px-4 py-3">Departamento</th><th class="px-4 py-3">Empresa</th><th class="px-4 py-3">Descripcion</th><th class="px-4 py-3">Acciones</th></tr>
+                <tr><th class="px-4 py-3">Departamento</th><th class="px-4 py-3">Empresa</th><th class="px-4 py-3">Acciones</th></tr>
               </thead>
               <tbody>
                 @for (department of departments(); track department.id) {
                   <tr class="border-t border-slate-100">
                     <td class="px-4 py-3">{{ department.name }}</td>
                     <td class="px-4 py-3">{{ companyName(department.companyId) }}</td>
-                    <td class="px-4 py-3 text-slate-600">{{ department.description || '-' }}</td>
                     <td class="px-4 py-3">
                       <button mat-icon-button (click)="openEdit(department)"><mat-icon>edit</mat-icon></button>
                       <button mat-icon-button color="warn" (click)="remove(department)"><mat-icon>delete</mat-icon></button>
                     </td>
                   </tr>
                 } @empty {
-                  <tr><td colspan="4" class="px-4 py-10 text-center text-slate-400">No hay departamentos</td></tr>
+                  <tr><td colspan="3" class="px-4 py-10 text-center text-slate-400">No hay departamentos</td></tr>
                 }
               </tbody>
             </table>
@@ -73,7 +72,6 @@ interface Department { id: string; companyId: string; name: string; description?
               </mat-form-field>
             }
             <mat-form-field appearance="outline" class="w-full"><mat-label>Nombre</mat-label><input matInput [(ngModel)]="form.name"></mat-form-field>
-            <mat-form-field appearance="outline" class="w-full"><mat-label>Descripcion</mat-label><textarea matInput rows="3" [(ngModel)]="form.description"></textarea></mat-form-field>
             <div class="mt-4 flex justify-end gap-2">
               <button mat-button (click)="showForm.set(false)">Cancelar</button>
               <button mat-flat-button color="primary" (click)="save()">Guardar</button>
@@ -93,7 +91,7 @@ export class DepartmentListComponent implements OnInit {
   loading = signal(true);
   showForm = signal(false);
   editId = signal<string | null>(null);
-  form = { companyId: '', name: '', description: '' };
+  form = { companyId: '', name: '' };
 
   ngOnInit() { this.load(); }
 
@@ -109,13 +107,13 @@ export class DepartmentListComponent implements OnInit {
 
   openCreate() {
     this.editId.set(null);
-    this.form = { companyId: this.auth.user()?.companyId || this.companies()[0]?.id || '', name: '', description: '' };
+    this.form = { companyId: this.auth.user()?.companyId || this.companies()[0]?.id || '', name: '' };
     this.showForm.set(true);
   }
 
   openEdit(d: Department) {
     this.editId.set(d.id);
-    this.form = { companyId: this.auth.user()?.companyId || d.companyId, name: d.name, description: d.description || '' };
+    this.form = { companyId: this.auth.user()?.companyId || d.companyId, name: d.name };
     this.showForm.set(true);
   }
 

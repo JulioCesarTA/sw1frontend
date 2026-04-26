@@ -53,10 +53,8 @@ interface TransitionOption {
 
 interface FormField {
   id: string;
-  label: string;
   name: string;
   type: string;
-  placeholder?: string;
   options?: string[];
   required?: boolean;
   isRequired?: boolean;
@@ -117,7 +115,7 @@ interface FileValue {
                   @for (field of currentFormFields(); track field.id) {
                     @if (field.type === 'FILE') {
                       <div class="mb-4 flex flex-col gap-2">
-                        <label class="text-sm font-medium text-slate-700">{{ field.label }}</label>
+                        <label class="text-sm font-medium text-slate-700">{{ field.name }}</label>
                         <input class="text-sm text-slate-700" type="file" (change)="onFileSelected(field, $event)">
                         @if (fieldValue(field)) {
                           <div class="text-xs text-indigo-600">
@@ -133,14 +131,13 @@ interface FileValue {
                       </div>
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
-                        <mat-label>{{ field.label }}</mat-label>
+                        <mat-label>{{ field.name }}</mat-label>
                         @switch (field.type) {
                           @case ('TEXTAREA') {
                             <textarea matInput rows="3"
                                       [ngModel]="fieldValue(field)"
                                       (ngModelChange)="setFieldValue(field, $event)"
-                                      [required]="isRequired(field)"
-                                      [placeholder]="field.placeholder || ''"></textarea>
+                                      [required]="isRequired(field)"></textarea>
                           }
                           @case ('SELECT') {
                             <mat-select [ngModel]="fieldValue(field)"
@@ -161,8 +158,7 @@ interface FileValue {
                             <input matInput type="number"
                                    [ngModel]="fieldValue(field)"
                                    (ngModelChange)="setFieldValue(field, $event)"
-                                   [required]="isRequired(field)"
-                                   [placeholder]="field.placeholder || ''">
+                                   [required]="isRequired(field)">
                           }
                           @case ('CHECKBOX') {
                             <mat-select [ngModel]="fieldValue(field) ? 'Si' : 'No'"
@@ -184,8 +180,7 @@ interface FileValue {
                             <input matInput
                                    [ngModel]="fieldValue(field)"
                                    (ngModelChange)="setFieldValue(field, $event)"
-                                   [required]="isRequired(field)"
-                                   [placeholder]="field.placeholder || ''">
+                                   [required]="isRequired(field)">
                           }
                         }
                       </mat-form-field>
@@ -326,7 +321,8 @@ export class ProcedureDetailComponent implements OnInit {
   historyDotClass(h: ProcedureDetail['history'][0]) {
     if (h.action === 'CREATED') return 'bg-blue-100 text-blue-700';
     if (h.action === 'REJECTED') return 'bg-rose-100 text-rose-700';
-    if (h.action === 'LOOP_REJECTED' || h.action === 'LOOP_APPROVED' || h.action === 'LOOP_EVALUATED') return 'bg-amber-100 text-amber-700';
+    if (h.action === 'DECISION_REJECTED' || h.action === 'LOOP_REJECTED') return 'bg-amber-100 text-amber-700';
+    if (h.action === 'LOOP_APPROVED' || h.action === 'LOOP_EVALUATED') return 'bg-sky-100 text-sky-700';
     if (h.isCurrent) return 'bg-amber-100 text-amber-700';
     return 'bg-emerald-100 text-emerald-700';
   }
@@ -334,18 +330,19 @@ export class ProcedureDetailComponent implements OnInit {
   historyLabelClass(h: ProcedureDetail['history'][0]) {
     if (h.action === 'CREATED') return 'text-blue-700';
     if (h.action === 'REJECTED') return 'text-rose-700';
-    if (h.action === 'LOOP_REJECTED' || h.action === 'LOOP_APPROVED' || h.action === 'LOOP_EVALUATED') return 'text-amber-700';
+    if (h.action === 'DECISION_REJECTED' || h.action === 'LOOP_REJECTED') return 'text-amber-700';
+    if (h.action === 'LOOP_APPROVED' || h.action === 'LOOP_EVALUATED') return 'text-sky-700';
     if (h.isCurrent) return 'text-amber-700';
     return 'text-emerald-700';
   }
 
   historyLabel(h: ProcedureDetail['history'][0]) {
     if (h.action === 'CREATED') return 'CREADO';
-    if (h.action === 'JOIN_ADVANCED') return 'UNIÓN COMPLETADA';
-    if (h.action === 'LOOP_REJECTED') return 'ITERACIÓN RECHAZADA';
-    if (h.action === 'LOOP_APPROVED') return 'ITERACIÓN APROBADA';
-    if (h.action === 'LOOP_EVALUATED') return 'ITERACIÓN EVALUADA';
-    if (h.action === 'ADVANCED') return 'AVANZADO';
+    if (h.action === 'JOIN_ADVANCED') return 'UNION COMPLETADA';
+    if (h.action === 'DECISION_REJECTED') return 'RECHAZADO';
+    if (h.action === 'LOOP_REJECTED') return 'RECHAZADO';
+    if (h.action === 'LOOP_APPROVED') return 'ITERACION APROBADA';
+    if (h.action === 'LOOP_EVALUATED') return 'ITERACION EVALUADA';
     if (h.action === 'REJECTED') return 'RECHAZADO';
     return h.action;
   }
@@ -353,6 +350,7 @@ export class ProcedureDetailComponent implements OnInit {
   historyIcon(action: string) {
     if (action === 'CREATED') return 'add_circle';
     if (action === 'REJECTED') return 'cancel';
+    if (action === 'DECISION_REJECTED') return 'undo';
     if (action === 'JOIN_ADVANCED') return 'merge_type';
     if (action === 'LOOP_REJECTED' || action === 'LOOP_APPROVED' || action === 'LOOP_EVALUATED') return 'repeat';
     return 'arrow_forward';
@@ -437,20 +435,18 @@ export class ProcedureDetailComponent implements OnInit {
   }
 
   decisionButtonLabel(option: TransitionOption, index: number): string {
-    if (option.branchOutcome === 'accept') return 'Aceptar';
-    if (option.branchOutcome === 'reject') return 'Rechazar';
     const raw = (option.label || option.name || '').trim();
-    const normalized = raw.toLowerCase();
-    if (normalized === 'repetir') return 'Repetir';
-    if (normalized === 'salir')   return 'Salir';
-    if (normalized === 'si' || normalized === 'sí' || normalized === 'aprobado' || normalized === 'aceptado') return 'Aceptar';
-    if (normalized === 'no' || normalized === 'rechazado' || normalized === 'rechazar') return 'Rechazar';
     if (raw) return raw;
-    return index === 0 ? 'Aceptar' : 'Rechazar';
+    return `Opcion ${index + 1}`;
   }
 
   isRejectTransition(option: TransitionOption, index: number): boolean {
-    return this.decisionButtonLabel(option, index) === 'Rechazar';
+    const normalized = this.decisionButtonLabel(option, index).toLowerCase();
+    return option.branchOutcome === 'reject'
+      || normalized === 'no'
+      || normalized === 'rechazar'
+      || normalized === 'rechazado'
+      || normalized === 'devolver';
   }
 
   private dedupeDecisionButtons(transitions: TransitionOption[]) {

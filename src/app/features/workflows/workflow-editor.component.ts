@@ -27,16 +27,14 @@ import {
 
 // ─────────────────────────── domain types ────────────────────────────────────
 
-type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE';
+type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'CORREO';
 type NodeVisualType = 'start' | 'process' | 'decision' | 'end' | 'fork' | 'join' | 'loop';
 type ForwardMode = 'all' | 'selected' | 'files-only' | 'none';
 
 interface FormField {
   id: string;
-  label: string;
   name: string;
   type: FieldType;
-  placeholder?: string;
   options?: string[];
   isRequired: boolean;
   order: number;
@@ -518,8 +516,7 @@ interface WorkyAssistantResponse {
                       @for (field of inc.fields; track field.name) {
                         <div class="flex items-center justify-between gap-2 rounded-[10px] border border-white/80 bg-white/75 px-2.5 py-1.5 text-[11px]">
                           <div class="min-w-0 flex-1">
-                            <strong class="block text-slate-800 truncate">{{ field.label }}</strong>
-                            <span class="text-slate-400">{{ field.name }}</span>
+                            <strong class="block text-slate-800 truncate">{{ field.name }}</strong>
                           </div>
                           <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600">{{ field.type }}</span>
                         </div>
@@ -571,7 +568,7 @@ interface WorkyAssistantResponse {
                 @for (field of editForm.formFields; track field.id; let i = $index) {
                   <div class="border border-slate-200 rounded-[14px] p-3 bg-slate-50">
                     <div class="grid grid-cols-2 gap-[10px]">
-                      <mat-form-field appearance="outline" class="w-full"><mat-label>Etiqueta</mat-label><input matInput [(ngModel)]="field.label"></mat-form-field>
+                      <mat-form-field appearance="outline" class="w-full"><mat-label>Nombre</mat-label><input matInput [(ngModel)]="field.name"></mat-form-field>
                       <mat-form-field appearance="outline" class="w-full">
                         <mat-label>Tipo</mat-label>
                         <mat-select [(ngModel)]="field.type">
@@ -580,10 +577,6 @@ interface WorkyAssistantResponse {
                           }
                         </mat-select>
                       </mat-form-field>
-                    </div>
-                    <div class="grid grid-cols-2 gap-[10px]">
-                      <mat-form-field appearance="outline" class="w-full"><mat-label>Nombre interno</mat-label><input matInput [(ngModel)]="field.name"></mat-form-field>
-                      <mat-form-field appearance="outline" class="w-full"><mat-label>Placeholder</mat-label><input matInput [(ngModel)]="field.placeholder"></mat-form-field>
                     </div>
                     <div class="flex justify-between items-center mt-[6px]">
                       <mat-slide-toggle [(ngModel)]="field.isRequired">Obligatorio</mat-slide-toggle>
@@ -648,7 +641,7 @@ interface WorkyAssistantResponse {
               <div class="flex flex-col gap-[10px] mt-2">
                 @for (field of sourceStageFields(); track field.name) {
                   <mat-checkbox [ngModel]="transEditFields.includes(field.name)" (ngModelChange)="toggleFieldForward(field.name, $event)">
-                    {{ field.label }} <span style="font-size:10px;opacity:.55;margin-left:4px;">{{ field.type }}</span>
+                    {{ field.name }} <span style="font-size:10px;opacity:.55;margin-left:4px;">{{ field.type }}</span>
                   </mat-checkbox>
                 }
               </div>
@@ -1024,7 +1017,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   transEditFields: string[]  = [];
   transEditIncludeFiles = false;
 
-  readonly fieldTypes: FieldType[] = ['TEXT', 'NUMBER', 'DATE', 'FILE'];
+  readonly fieldTypes: FieldType[] = ['TEXT', 'NUMBER', 'DATE', 'FILE', 'CORREO'];
 
   // ── Computed ──────────────────────────────────────────────────────────────
   selectedTransition = computed(() => {
@@ -1113,7 +1106,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
         const srcStage  = wf.stages.find(s => s.id === t.fromStageId);
         const mode      = t.forwardConfig?.mode ?? 'all';
         const fields = this.getTransitionForwardedFields(t, wf)
-          .map(f => ({ label: f.label, name: f.name, type: f.type }));
+          .map(f => ({ name: f.name, type: f.type }));
 
         return {
           transitionId:   t.id,
@@ -1678,14 +1671,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       this.snack.open(this.stageLockTitle(stage.id), '', { duration: 2500 });
       return;
     }
-    // selectStage handles the lock — no duplicate lock here
-    if (this.selectedStage()?.id !== stage.id) {
-      const prev = this.selectedStage();
-      if (prev && this.collab.isConnected() && this.isStageLockedByMe(prev.id)) {
-        this.collab.unlockStage(prev.id);
-      }
-      this.selectStage(stage);
-    }
+    // The selection changes only after the lock is confirmed over websocket.
     this.startDragInteraction(stage, evt);
   }
 
@@ -2256,11 +2242,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
             title: this.editForm.formTitle,
             fields: normalizedFormFields.map((f, i) => ({
               id: f.id,
-              label: f.label,
               name: f.name,
               type: f.type,
               required: f.isRequired,
-              placeholder: f.placeholder ?? '',
               options: f.options ?? [],
               order: i + 1
             }))
@@ -2333,8 +2317,8 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     this.editForm.formFields = [
       ...this.editForm.formFields,
       {
-        id: crypto.randomUUID(), label: 'Campo nuevo', name: nextName,
-        type: 'TEXT', placeholder: '', options: [], isRequired: false,
+        id: crypto.randomUUID(), name: nextName,
+        type: 'TEXT', options: [], isRequired: false,
         order: this.editForm.formFields.length + 1
       }
     ];
@@ -2365,7 +2349,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   private normalizeFormFields(fields: FormField[]): FormField[] {
     const usedNames = new Set<string>();
     return fields.map((field, index) => {
-      const baseName = this.slugifyFieldName(field.name || field.label || `campo_${index + 1}`);
+      const baseName = this.slugifyFieldName(field.name || `campo_${index + 1}`);
       const uniqueName = this.buildUniqueFieldName(baseName, [], usedNames);
       return {
         ...field,
@@ -2378,7 +2362,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
 
   private normalizeFieldType(type: string): FieldType {
     const normalized = String(type ?? 'TEXT').toUpperCase();
-    return ['TEXT', 'NUMBER', 'DATE', 'FILE'].includes(normalized)
+    return ['TEXT', 'NUMBER', 'DATE', 'FILE', 'CORREO'].includes(normalized)
       ? (normalized as FieldType)
       : 'TEXT';
   }
@@ -2420,10 +2404,8 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     const rawFields = Array.isArray(raw.fields) ? raw.fields : [];
     const mappedFields: FormField[] = rawFields.map((field: any, index: number) => ({
       id: String(field?.id ?? crypto.randomUUID()),
-      label: String(field?.label ?? `Campo ${index + 1}`),
       name: String(field?.name ?? field?.label ?? `campo_${index + 1}`),
       type: this.normalizeFieldType(String(field?.type ?? 'TEXT')),
-      placeholder: String(field?.placeholder ?? ''),
       options: Array.isArray(field?.options) ? field.options.map((option: any) => String(option)) : [],
       isRequired: Boolean(field?.isRequired ?? field?.required),
       order: Number(field?.order ?? index + 1)
@@ -2721,6 +2703,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       this.selectStage(stage);
       return;
     }
+    if (this.pendingLockStageId() === stage.id) {
+      return;
+    }
     if (this.isStageLockedByMe(stage.id)) {
       this.selectStage(stage);
       return;
@@ -2823,11 +2808,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
                     title: formDefinition.title,
                     fields: formDefinition.fields.map((field, index) => ({
                       id: field.id,
-                      label: field.label,
                       name: field.name,
                       type: field.type,
                       required: field.isRequired,
-                      placeholder: field.placeholder ?? '',
                       options: field.options ?? [],
                       order: index + 1
                     }))
@@ -2897,11 +2880,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
                     title: formDefinition.title,
                     fields: formDefinition.fields.map((field, index) => ({
                       id: field.id,
-                      label: field.label,
                       name: field.name,
                       type: field.type,
                       required: field.isRequired,
-                      placeholder: field.placeholder ?? '',
                       options: field.options ?? [],
                       order: index + 1
                     }))

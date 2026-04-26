@@ -39,10 +39,8 @@ interface WorkflowTransition {
 
 interface FormField {
   id: string;
-  label: string;
   name: string;
   type: string;
-  placeholder?: string;
   options?: string[];
   required?: boolean;
   isRequired?: boolean;
@@ -96,6 +94,22 @@ interface WorkflowDetail extends Workflow {
         </button>
       </div>
 
+      <div class="max-w-[320px]">
+        <mat-form-field appearance="outline" class="w-full">
+          <mat-label>Buscar por codigo</mat-label>
+          <input
+            matInput
+            [ngModel]="codeFilter()"
+            (ngModelChange)="codeFilter.set($event)"
+            placeholder="Ej: TRM00068">
+          @if (codeFilter().trim()) {
+            <button mat-icon-button matSuffix (click)="codeFilter.set('')" aria-label="Limpiar filtro">
+              <mat-icon>close</mat-icon>
+            </button>
+          }
+        </mat-form-field>
+      </div>
+
       @if (loading()) {
         <div class="flex justify-center py-16"><mat-spinner /></div>
       } @else {
@@ -108,7 +122,7 @@ interface WorkflowDetail extends Workflow {
                 </tr>
               </thead>
               <tbody>
-                @for (p of procedures(); track p.id) {
+                @for (p of filteredProcedures(); track p.id) {
                   <tr class="border-t border-slate-100 hover:bg-slate-50">
                     <td class="px-4 py-3"><code class="rounded bg-slate-100 px-2 py-1 text-xs">{{ p.code }}</code></td>
                     <td class="px-4 py-3">{{ p.title }}</td>
@@ -146,7 +160,7 @@ interface WorkflowDetail extends Workflow {
               <div class="flex justify-center pb-5 pt-2"><mat-spinner diameter="24" /></div>
             } @else if (entryStage()) {
               <div class="mb-4 flex flex-col gap-1 text-sm text-slate-600">
-                <strong>Etapa que llena tu rol:</strong> {{ entryStage()!.name }}
+                <strong>Etapa que llena tu rol:</strong> 
            
               </div>
 
@@ -156,7 +170,7 @@ interface WorkflowDetail extends Workflow {
                   @for (field of entryFormFields(); track field.id) {
                     @if (field.type === 'FILE') {
                       <div class="mb-4 flex flex-col gap-2">
-                        <label class="text-sm font-medium text-slate-700">{{ field.label }}</label>
+                        <label class="text-sm font-medium text-slate-700">{{ field.name }}</label>
                         <input class="text-sm text-slate-700" type="file" (change)="onFileSelected(field, $event)">
                         @if (fieldValue(field)) {
                           <div class="text-xs text-indigo-600">
@@ -172,14 +186,13 @@ interface WorkflowDetail extends Workflow {
                       </div>
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
-                        <mat-label>{{ field.label }}</mat-label>
+                        <mat-label>{{ field.name }}</mat-label>
                         @switch (field.type) {
                           @case ('TEXTAREA') {
                             <textarea matInput rows="3"
                                       [ngModel]="fieldValue(field)"
                                       (ngModelChange)="setFieldValue(field, $event)"
-                                      [required]="isRequired(field)"
-                                      [placeholder]="field.placeholder || ''"></textarea>
+                                      [required]="isRequired(field)"></textarea>
                           }
                           @case ('SELECT') {
                             <mat-select [ngModel]="fieldValue(field)"
@@ -200,8 +213,7 @@ interface WorkflowDetail extends Workflow {
                             <input matInput type="number"
                                    [ngModel]="fieldValue(field)"
                                    (ngModelChange)="setFieldValue(field, $event)"
-                                   [required]="isRequired(field)"
-                                   [placeholder]="field.placeholder || ''">
+                                   [required]="isRequired(field)">
                           }
                           @case ('CHECKBOX') {
                             <mat-select [ngModel]="fieldValue(field) ? 'Si' : 'No'"
@@ -223,8 +235,7 @@ interface WorkflowDetail extends Workflow {
                             <input matInput
                                    [ngModel]="fieldValue(field)"
                                    (ngModelChange)="setFieldValue(field, $event)"
-                                   [required]="isRequired(field)"
-                                   [placeholder]="field.placeholder || ''">
+                                   [required]="isRequired(field)">
                           }
                         }
                       </mat-form-field>
@@ -267,12 +278,20 @@ export class ProcedureListComponent implements OnInit {
   submitTransition = signal<WorkflowTransition | null>(null);
   formValues = signal<Record<string, unknown>>({});
   formWorkflowId = '';
+  codeFilter = signal('');
 
   entryFormFields = computed(() =>
     [...(this.entryStage()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   );
   submitTransitionLabel = computed(() => this.submitTransition()?.name || 'Siguiente etapa');
   submitButtonLabel = computed(() => this.submitting() ? 'Enviando...' : 'Enviar');
+  filteredProcedures = computed(() => {
+    const filter = this.codeFilter().trim().toLowerCase();
+    if (!filter) return this.procedures();
+    return this.procedures().filter(procedure =>
+      (procedure.code || '').toLowerCase().includes(filter)
+    );
+  });
 
   ngOnInit() {
     this.api.get<Procedure[]>('/procedures').subscribe({

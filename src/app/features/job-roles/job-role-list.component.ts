@@ -14,7 +14,7 @@ import { AuthService } from '../../core/services/auth.service';
 
 interface Company { id: string; name: string; }
 interface Department { id: string; companyId: string; name: string; }
-interface JobRole { id: string; companyId: string; departmentId: string; name: string; description?: string; }
+interface JobRole { id: string; companyId: string; departmentId: string; name: string; }
 
 @Component({
   selector: 'app-job-role-list',
@@ -85,10 +85,6 @@ interface JobRole { id: string; companyId: string; departmentId: string; name: s
               <mat-label>Nombre del rol</mat-label>
               <input matInput [(ngModel)]="form.name">
             </mat-form-field>
-            <mat-form-field appearance="outline" class="w-full">
-              <mat-label>Descripcion</mat-label>
-              <textarea matInput rows="3" [(ngModel)]="form.description"></textarea>
-            </mat-form-field>
             <div class="mt-4 flex justify-end gap-2">
               <button mat-button (click)="showForm.set(false)">Cancelar</button>
               <button mat-flat-button color="primary" (click)="save()">Guardar</button>
@@ -110,7 +106,7 @@ export class JobRoleListComponent implements OnInit {
   loading = signal(true);
   showForm = signal(false);
   editId = signal<string | null>(null);
-  form = { companyId: '', departmentId: '', name: '', description: '' };
+  form = { companyId: '', departmentId: '', name: '' };
 
   availableDepartments = computed(() => {
     if (!this.form.companyId) return [];
@@ -149,8 +145,7 @@ export class JobRoleListComponent implements OnInit {
     this.form = {
       companyId: this.auth.user()?.companyId || this.companies()[0]?.id || '',
       departmentId: '',
-      name: '',
-      description: ''
+      name: ''
     };
     this.showForm.set(true);
   }
@@ -160,8 +155,7 @@ export class JobRoleListComponent implements OnInit {
     this.form = {
       companyId: this.auth.user()?.companyId || jobRole.companyId,
       departmentId: jobRole.departmentId,
-      name: jobRole.name,
-      description: jobRole.description || ''
+      name: jobRole.name
     };
     this.showForm.set(true);
   }
@@ -170,8 +164,7 @@ export class JobRoleListComponent implements OnInit {
     const body = {
       companyId: this.form.companyId,
       departmentId: this.form.departmentId,
-      name: this.form.name,
-      description: this.form.description
+      name: this.form.name
     };
     const request = this.editId() ? this.api.patch(`/job-roles/${this.editId()}`, body) : this.api.post('/job-roles', body);
     request.subscribe({

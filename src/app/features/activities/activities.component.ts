@@ -36,10 +36,8 @@ interface Transition {
 
 interface FormField {
   id: string;
-  label: string;
   name: string;
   type: string;
-  placeholder?: string;
   options?: string[];
   required?: boolean;
   isRequired?: boolean;
@@ -53,7 +51,6 @@ interface FormDefinition {
 }
 
 interface IncomingField {
-  label: string;
   name: string;
   type: string;
   value: unknown;
@@ -157,7 +154,7 @@ interface ActivityDetail {
                       </div>
                       @for (field of incoming.fields; track field.name) {
                         <div class="mb-2">
-                          <label class="mb-1 block text-xs text-slate-500">{{ field.label }}</label>
+                          <label class="mb-1 block text-xs text-slate-500">{{ field.name }}</label>
                           <div class="rounded-[10px] border border-slate-200 bg-white p-2.5 text-[13px] text-slate-900">
                             @if (isFileValue(field.value)) {
                               <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFileAny(field.value)">
@@ -180,7 +177,7 @@ interface ActivityDetail {
                   @for (field of currentFormFields(); track field.id) {
                     @if (field.type === 'FILE') {
                       <div class="mb-4 flex flex-col gap-2">
-                        <label class="text-[13px] font-medium text-slate-700">{{ field.label }}</label>
+                        <label class="text-[13px] font-medium text-slate-700">{{ field.name }}</label>
                         <input class="text-[13px] text-slate-700" type="file" (change)="onFileSelected(field, $event)">
                         @if (fieldValue(field)) {
                           <div class="text-xs text-indigo-500">
@@ -196,7 +193,7 @@ interface ActivityDetail {
                       </div>
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
-                        <mat-label>{{ field.label }}</mat-label>
+                        <mat-label>{{ field.name }}</mat-label>
                         @switch (field.type) {
                           @case ('TEXTAREA') {
                             <textarea matInput rows="3"
@@ -239,8 +236,7 @@ interface ActivityDetail {
                           @default {
                             <input matInput
                                    [ngModel]="fieldValue(field)"
-                                   (ngModelChange)="setFieldValue(field, $event)"
-                                   [placeholder]="field.placeholder || ''">
+                                   (ngModelChange)="setFieldValue(field, $event)">
                           }
                         }
                       </mat-form-field>
@@ -439,24 +435,15 @@ export class ActivitiesComponent implements OnInit {
   }
 
   decisionButtonLabel(option: Transition, index: number): string {
-    if (option.branchOutcome === 'accept') {
-      return 'Aceptar';
-    }
-    if (option.branchOutcome === 'reject') {
-      return 'Rechazar';
-    }
-    const normalized = (option.label || option.name || '').trim().toLowerCase();
-    if (normalized === 'si' || normalized === 'sí' || normalized === 'aprobado' || normalized === 'aceptado') {
-      return 'Aceptar';
-    }
-    if (normalized === 'no' || normalized === 'rechazado' || normalized === 'rechazar') {
-      return 'Rechazar';
-    }
-    return index === 0 ? 'Aceptar' : 'Rechazar';
+    return (option.label || option.name || '').trim() || `Opcion ${index + 1}`;
   }
 
   isRejectTransition(option: Transition, index: number): boolean {
-    return this.decisionButtonLabel(option, index) === 'Rechazar';
+    const normalized = this.decisionButtonLabel(option, index).toLowerCase();
+    return option.branchOutcome === 'reject'
+      || normalized === 'no'
+      || normalized === 'rechazar'
+      || normalized === 'rechazado';
   }
 
   routingButtonLabel(option: Transition): string {

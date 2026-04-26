@@ -70,7 +70,7 @@ interface DashboardStats { totalProcedures: number; byStatus: Record<string, num
                   <th class="py-2">Promedio</th><th class="py-2">SLA</th></tr>
                 </thead>
                 <tbody>
-                  @for (item of earlyRoles(); track item.departmentName + item.jobRoleName) {
+                  @for (item of tempranoRoles(); track item.departmentName + item.jobRoleName) {
                     <tr class="border-b border-slate-100"><td class="py-2">{{ item.departmentName }}</td>
                     <td class="py-2">{{ item.jobRoleName }}</td><td class="py-2 text-emerald-600">{{ item.finishedEarly }}</td>
                     <td class="py-2">{{ item.averageDurationHours }}</td><td class="py-2">{{ item.averageSlaHours }}</td></tr>
@@ -91,7 +91,7 @@ interface DashboardStats { totalProcedures: number; byStatus: Record<string, num
                   <th class="py-2">Promedio</th><th class="py-2">SLA</th></tr>
                 </thead>
                 <tbody>
-                  @for (item of lateRoles(); track item.departmentName + item.jobRoleName) {
+                  @for (item of tardeRoles(); track item.departmentName + item.jobRoleName) {
                     <tr class="border-b border-slate-100"><td class="py-2">{{ item.departmentName }}</td>
                     <td class="py-2">{{ item.jobRoleName }}</td><td class="py-2 text-rose-600">{{ item.finishedLate }}</td>
                     <td class="py-2">{{ item.averageDurationHours }}</td><td class="py-2">{{ item.averageSlaHours }}</td></tr>
@@ -115,8 +115,8 @@ export class ReportsComponent implements OnInit, OnDestroy {
   realtimeConnected = signal(false);
   statusEntries = computed(() => Object.entries(this.stats()?.byStatus ?? {}).map(([key, value]) => ({ key, value })));
   topDepartments = computed(() => (this.stats()?.departmentFlow ?? []).slice(0, 8));
-  earlyRoles = computed(() => (this.stats()?.rolePerformance ?? []).filter(item => item.finishedEarly > 0).sort((a, b) => b.finishedEarly - a.finishedEarly).slice(0, 8));
-  lateRoles = computed(() => (this.stats()?.rolePerformance ?? []).filter(item => item.finishedLate > 0).sort((a, b) => b.finishedLate - a.finishedLate).slice(0, 8));
+  tempranoRoles = computed(() => (this.stats()?.rolePerformance ?? []).filter(item => item.finishedEarly > 0).sort((a, b) => b.finishedEarly - a.finishedEarly).slice(0, 8));
+  tardeRoles = computed(() => (this.stats()?.rolePerformance ?? []).filter(item => item.finishedLate > 0).sort((a, b) => b.finishedLate - a.finishedLate).slice(0, 8));
 
   ngOnInit() {
     this.api.get<DashboardStats>('/reports/dashboard').subscribe({ next: stats => { this.stats.set(stats); 

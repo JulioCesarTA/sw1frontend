@@ -156,14 +156,14 @@ export class ActivitiesComponent implements OnInit {
   activities = signal<ActivitySummary[]>([]);
   selectedActivity = signal<ActivityDetail | null>(null);
   selectedActivityId = signal<string | null>(null);
-  currentForm = signal<ActivityForm | null>(null);
+  formularioActual = signal<ActivityForm | null>(null);
   fieldValues = signal<Record<string, unknown>>({});
   isLoading = signal(true);
   isDetailLoading = signal(false);
   isSubmitting = signal(false);
 
-  formFields = computed(() => [...(this.currentForm()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0)));
-  formTitle = computed(() => this.currentForm()?.title || this.selectedActivity()?.formDefinition?.title || "Formulario");
+  formFields = computed(() => [...(this.formularioActual()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0)));
+  formTitle = computed(() => this.formularioActual()?.title || this.selectedActivity()?.formDefinition?.title || "Formulario");
   visibleTransitions = computed(() => {
     const seen = new Set<string>();
     return (this.selectedActivity()?.availableTransitions ?? []).filter((transition) => {
@@ -186,7 +186,7 @@ export class ActivitiesComponent implements OnInit {
         if (!selectedId) {
           this.selectedActivityId.set(null);
           this.selectedActivity.set(null);
-          this.currentForm.set(null);
+          this.formularioActual.set(null);
           return;
         }
         this.selectActivity(selectedId);
@@ -202,18 +202,18 @@ export class ActivitiesComponent implements OnInit {
   selectActivity(activityId: string) {
     this.selectedActivityId.set(activityId);
     this.isDetailLoading.set(true);
-    this.currentForm.set(null);
+    this.formularioActual.set(null);
     this.api.get<ActivityDetail>(`/activities/${activityId}`).subscribe({
       next: (activity) => {
         this.selectedActivity.set(activity);
         this.fieldValues.set({ ...(activity.formData ?? {}) });
         this.api.get<ActivityForm>(`/forms/stage/${activity.currentStageId}`).subscribe({
           next: (form) => {
-            this.currentForm.set(form);
+            this.formularioActual.set(form);
             this.isDetailLoading.set(false);
           },
           error: () => {
-            this.currentForm.set(activity.formDefinition ?? null);
+            this.formularioActual.set(activity.formDefinition ?? null);
             this.isDetailLoading.set(false);
           },
         });
@@ -232,7 +232,7 @@ export class ActivitiesComponent implements OnInit {
     this.api.post(`/procedures/${activityId}/advance`, { transitionId, formData: this.fieldValues() }).subscribe({
       next: () => {
         this.isSubmitting.set(false);
-        this.currentForm.set(null);
+        this.formularioActual.set(null);
         this.snackBar.open("Actividad enviada", "", { duration: 2500 });
         this.loadActivities();
       },
@@ -245,7 +245,7 @@ export class ActivitiesComponent implements OnInit {
 
   fieldValue(field: ActivityFormField) { return this.fieldValues()[field.name] ?? ""; }
   setFieldValue(field: ActivityFormField, value: unknown) { this.fieldValues.update((current) => ({ ...current, [field.name]: value })); }
-  inputType(type: string) { return type === "DATE" ? "date" : type === "NUMBER" ? "number" : type === "CORREO" ? "email" : "text"; }
+  inputType(type: string) { return type === "DATE" ? "date" : type === "NUMBER" ? "number" : type === "EMAIL" ? "email" : "text"; }
   isUploadedFile(value: unknown): value is UploadedFile { return !!value && typeof value === "object" && "storedName" in (value as Record<string, unknown>); }
   uploadedFileName(value: unknown) { return this.isUploadedFile(value) ? value.fileName || value.storedName : ""; }
 

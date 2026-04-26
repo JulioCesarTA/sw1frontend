@@ -7,7 +7,6 @@ interface ReportsRealtimeHandlers {
   onConnected?: () => void;
   onDisconnected?: () => void;
   onDashboard?: (payload: any) => void;
-  onByWorkflow?: (payload: any[]) => void;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -15,7 +14,6 @@ export class ReportsRealtimeService {
   private zone = inject(NgZone);
   private client: Client | null = null;
   private handlers: ReportsRealtimeHandlers = {};
-  private connected = false;
 
   connect(handlers: ReportsRealtimeHandlers) {
     const token = localStorage.getItem('accessToken');
@@ -27,26 +25,12 @@ export class ReportsRealtimeService {
       connectHeaders: token ? { Authorization: `Bearer ${token}` } : {},
       reconnectDelay: 5000,
       onConnect: () => {
-        this.zone.run(() => {
-          this.connected = true;
-          this.handlers.onConnected?.();
-        });
+        this.zone.run(() => this.handlers.onConnected?.());
         if (!this.client) return;
         this.client.subscribe('/topic/reports/dashboard', message => this.handleDashboard(message));
-        this.client.subscribe('/topic/reports/by-workflow', message => this.handleByWorkflow(message));
       },
-      onWebSocketClose: () => {
-        this.zone.run(() => {
-          this.connected = false;
-          this.handlers.onDisconnected?.();
-        });
-      },
-      onStompError: () => {
-        this.zone.run(() => {
-          this.connected = false;
-          this.handlers.onDisconnected?.();
-        });
-      }
+      onWebSocketClose: () => this.zone.run(() => this.handlers.onDisconnected?.()),
+      onStompError: () => this.zone.run(() => this.handlers.onDisconnected?.())
     });
 
     this.client.activate();
@@ -55,23 +39,12 @@ export class ReportsRealtimeService {
   disconnect() {
     this.client?.deactivate();
     this.client = null;
-    this.connected = false;
     this.handlers = {};
-  }
-
-  isConnected(): boolean {
-    return this.connected && !!this.client?.connected;
   }
 
   private handleDashboard(message: IMessage) {
     this.zone.run(() => {
       this.handlers.onDashboard?.(JSON.parse(message.body));
-    });
-  }
-
-  private handleByWorkflow(message: IMessage) {
-    this.zone.run(() => {
-      this.handlers.onByWorkflow?.(JSON.parse(message.body));
     });
   }
 }

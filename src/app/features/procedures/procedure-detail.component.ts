@@ -75,6 +75,26 @@ interface FileValue {
   downloadPath?: string;
 }
 
+const HISTORY_LABELS: Record<string, string> = {
+  CREATED: 'CREADO',
+  JOIN_ADVANCED: 'UNION COMPLETADA',
+  DECISION_REJECTED: 'RECHAZADO',
+  LOOP_REJECTED: 'RECHAZADO',
+  LOOP_APPROVED: 'ITERACION APROBADA',
+  LOOP_EVALUATED: 'ITERACION EVALUADA',
+  REJECTED: 'RECHAZADO'
+};
+
+const HISTORY_ICONS: Record<string, string> = {
+  CREATED: 'add_circle',
+  REJECTED: 'cancel',
+  DECISION_REJECTED: 'undo',
+  JOIN_ADVANCED: 'merge_type',
+  LOOP_REJECTED: 'repeat',
+  LOOP_APPROVED: 'repeat',
+  LOOP_EVALUATED: 'repeat'
+};
+
 @Component({
   selector: 'app-procedure-detail',
   standalone: true,
@@ -285,7 +305,6 @@ export class ProcedureDetailComponent implements OnInit {
   currentForm = signal<FormDefinition | null>(null);
   formValues = signal<Record<string, unknown>>({});
   loading = signal(true);
-  selectedTransition = '';
   comment = '';
 
   currentFormFields = computed(() =>
@@ -337,23 +356,11 @@ export class ProcedureDetailComponent implements OnInit {
   }
 
   historyLabel(h: ProcedureDetail['history'][0]) {
-    if (h.action === 'CREATED') return 'CREADO';
-    if (h.action === 'JOIN_ADVANCED') return 'UNION COMPLETADA';
-    if (h.action === 'DECISION_REJECTED') return 'RECHAZADO';
-    if (h.action === 'LOOP_REJECTED') return 'RECHAZADO';
-    if (h.action === 'LOOP_APPROVED') return 'ITERACION APROBADA';
-    if (h.action === 'LOOP_EVALUATED') return 'ITERACION EVALUADA';
-    if (h.action === 'REJECTED') return 'RECHAZADO';
-    return h.action;
+    return HISTORY_LABELS[h.action] || h.action;
   }
 
   historyIcon(action: string) {
-    if (action === 'CREATED') return 'add_circle';
-    if (action === 'REJECTED') return 'cancel';
-    if (action === 'DECISION_REJECTED') return 'undo';
-    if (action === 'JOIN_ADVANCED') return 'merge_type';
-    if (action === 'LOOP_REJECTED' || action === 'LOOP_APPROVED' || action === 'LOOP_EVALUATED') return 'repeat';
-    return 'arrow_forward';
+    return HISTORY_ICONS[action] || 'arrow_forward';
   }
 
   load() {
@@ -362,10 +369,7 @@ export class ProcedureDetailComponent implements OnInit {
         this.procedure.set(p);
         this.formValues.set((p.formData as Record<string, unknown>) ?? {});
         this.loading.set(false);
-        this.api.get<FormDefinition>(`/forms/stage/${p.currentStageId}`).subscribe({
-          next: form => this.currentForm.set(form),
-          error: () => this.currentForm.set(null)
-        });
+        this.loadForm(p.currentStageId);
       },
       error: () => this.loading.set(false)
     });
@@ -468,15 +472,18 @@ export class ProcedureDetailComponent implements OnInit {
       next: (p: any) => {
         this.procedure.set(p);
         this.formValues.set((p.formData as Record<string, unknown>) ?? {});
-        this.selectedTransition = '';
         this.comment = '';
-        this.api.get<FormDefinition>(`/forms/stage/${p.currentStageId}`).subscribe({
-          next: form => this.currentForm.set(form),
-          error: () => this.currentForm.set(null)
-        });
+        this.loadForm(p.currentStageId);
         this.snack.open('Tramite avanzado', '', { duration: 2000 });
       },
       error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
+    });
+  }
+
+  private loadForm(stageId: string) {
+    this.api.get<FormDefinition>(`/forms/stage/${stageId}`).subscribe({
+      next: form => this.currentForm.set(form),
+      error: () => this.currentForm.set(null)
     });
   }
 

@@ -160,7 +160,7 @@ interface WorkflowDetail extends Workflow {
               <div class="flex justify-center pb-5 pt-2"><mat-spinner diameter="24" /></div>
             } @else if (entryStage()) {
               <div class="mb-4 flex flex-col gap-1 text-sm text-slate-600">
-                <strong>Etapa que llena tu rol:</strong> 
+                <strong>Etapa que llena tu rol:</strong> {{ entryStage()!.name }}
            
               </div>
 
@@ -283,7 +283,6 @@ export class ProcedureListComponent implements OnInit {
   entryFormFields = computed(() =>
     [...(this.entryStage()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   );
-  submitTransitionLabel = computed(() => this.submitTransition()?.name || 'Siguiente etapa');
   submitButtonLabel = computed(() => this.submitting() ? 'Enviando...' : 'Enviar');
   filteredProcedures = computed(() => {
     const filter = this.codeFilter().trim().toLowerCase();
@@ -333,41 +332,18 @@ export class ProcedureListComponent implements OnInit {
       return { entry: null as WorkflowStage | null, startTransition: null as WorkflowTransition | null };
     }
 
-    let startTransition: WorkflowTransition | null = null;
-    if ((firstStage.nodeType || '').toLowerCase() === 'start') {
-      startTransition = workflow.transitions.find(t => t.fromStageId === firstStage.id) ?? null;
-    }
+    const startTransition = (firstStage.nodeType || '').toLowerCase() === 'start'
+      ? workflow.transitions.find(t => t.fromStageId === firstStage.id) ?? null
+      : null;
 
     const candidateStages = stages.filter(stage => (stage.nodeType || '').toLowerCase() !== 'start');
-    const byDepartment = candidateStages.find(stage =>
+    const entry = candidateStages.find(stage =>
       !!user?.departmentId && stage.responsibleDepartmentId === user.departmentId
-    );
+    ) ?? (startTransition
+      ? stages.find(stage => stage.id === startTransition.toStageId) ?? firstStage
+      : firstStage);
 
-    if (byDepartment) {
-      return { entry: byDepartment, startTransition };
-    }
-
-    if (startTransition) {
-      const nextStageId = startTransition.toStageId;
-      return {
-        entry: stages.find(stage => stage.id === nextStageId) ?? firstStage,
-        startTransition
-      };
-    }
-
-    return { entry: firstStage, startTransition };
-  }
-
-  private loadStageForm(stage: WorkflowStage) {
-    if (stage.formDefinition?.fields?.length) {
-      this.entryStage.set(stage);
-      return;
-    }
-
-    this.api.get<FormDefinition>(`/forms/stage/${stage.id}`).subscribe({
-      next: form => this.entryStage.set({ ...stage, formDefinition: form }),
-      error: () => this.entryStage.set(stage)
-    });
+    return { entry, startTransition };
   }
 
   onWorkflowChange(workflowId: string) {
@@ -388,8 +364,15 @@ export class ProcedureListComponent implements OnInit {
           if (!entry) return;
 
           this.autoStartTransition.set(startTransition);
-          this.loadStageForm(entry);
           this.submitTransition.set(workflow.transitions.find(t => t.fromStageId === entry.id) ?? null);
+          if (entry.formDefinition?.fields?.length) {
+            this.entryStage.set(entry);
+            return;
+          }
+          this.api.get<FormDefinition>(`/forms/stage/${entry.id}`).subscribe({
+            next: form => this.entryStage.set({ ...entry, formDefinition: form }),
+            error: () => this.entryStage.set(entry)
+          });
         },
         error: (err) => {
           this.snack.open(err.error?.message || 'Error al cargar el workflow', '', { duration: 3000 });

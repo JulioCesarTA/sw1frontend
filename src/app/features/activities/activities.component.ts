@@ -1,98 +1,29 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
-import { MatCardModule } from '@angular/material/card';
-import { MatButtonModule } from '@angular/material/button';
-import { MatIconModule } from '@angular/material/icon';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { ApiService } from '../../core/services/api.service';
-import { environment } from '../../../environments/environment';
+import { CommonModule } from "@angular/common";
+import { Component, computed, inject, OnInit, signal } from "@angular/core";
+import { FormsModule } from "@angular/forms";
+import { MatButtonModule } from "@angular/material/button";
+import { MatCardModule } from "@angular/material/card";
+import { MatFormFieldModule } from "@angular/material/form-field";
+import { MatIconModule } from "@angular/material/icon";
+import { MatInputModule } from "@angular/material/input";
+import { MatProgressSpinnerModule } from "@angular/material/progress-spinner";
+import { MatSnackBar, MatSnackBarModule } from "@angular/material/snack-bar";
+import { ApiService } from "../../core/services/api.service";
+import { environment } from "../../../environments/environment";
 
-interface ActivitySummary {
-  id: string;
-  code: string;
-  title: string;
-  status: string;
-  workflowName: string;
-  currentStageName: string;
-  createdAt: string;
-}
-
-interface Transition {
-  id: string;
-  fromStageId: string;
-  toStageId: string;
-  name?: string;
-  label?: string;
-  targetStageName?: string;
-  kind?: string;
-  decisionNodeType?: string;
-  branchOutcome?: string;
-}
-
-interface FormField {
-  id: string;
-  name: string;
-  type: string;
-  options?: string[];
-  required?: boolean;
-  isRequired?: boolean;
-  order?: number;
-}
-
-interface FormDefinition {
-  id: string;
-  title: string;
-  fields: FormField[];
-}
-
-interface IncomingField {
-  name: string;
-  type: string;
-  value: unknown;
-}
-
-interface FileValue {
-  fileName: string;
-  storedName: string;
-  contentType?: string;
-  size?: number;
-  downloadPath?: string;
-}
-
-interface IncomingData {
-  transitionId: string;
-  transitionName?: string;
-  fromStageName: string;
-  fields: IncomingField[];
-}
-
-interface ActivityDetail {
-  id: string;
-  code: string;
-  title: string;
-  description?: string;
-  status: string;
-  workflowName: string;
-  currentStageId: string;
-  currentStageName: string;
-  formData?: Record<string, unknown>;
-  formDefinition?: FormDefinition;
-  availableTransitions: Transition[];
-  incomingData: IncomingData[];
-}
+interface ActivitySummary { id: string; code: string; title: string; status: string; workflowName: string; currentStageName: string; }
+interface ActivityTransition { id: string; name?: string; label?: string; branchOutcome?: string; }
+interface ActivityFormField { id: string; name: string; type: string; order?: number; }
+interface ActivityForm { id: string; title: string; fields: ActivityFormField[]; }
+interface UploadedFile { fileName: string; storedName: string; downloadPath?: string; }
+interface IncomingField { name: string; value: unknown; }
+interface IncomingBlock { transitionId: string; transitionName?: string; fromStageName: string; fields: IncomingField[]; }
+interface ActivityDetail { id: string; code: string; workflowName: string; currentStageId: string; currentStageName: string; formData?: Record<string, unknown>; formDefinition?: ActivityForm; availableTransitions: ActivityTransition[]; incomingData: IncomingBlock[]; }
 
 @Component({
-  selector: 'app-activities',
+  selector: "app-activities",
   standalone: true,
-  imports: [
-    CommonModule, FormsModule, MatCardModule, MatButtonModule, MatIconModule,
-    MatFormFieldModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule
-  ],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule],
   template: `
     <div class="mx-auto max-w-[1400px] p-6">
       <div class="mb-5">
@@ -100,21 +31,20 @@ interface ActivityDetail {
         <p class="mt-1.5 text-[13px] text-slate-500">Las tareas que tienes pendientes por rol, cargo o departamento.</p>
       </div>
 
-      @if (loading()) {
+      @if (isLoading()) {
         <div class="flex justify-center p-10"><mat-spinner /></div>
       } @else {
         <div class="grid grid-cols-1 gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
           <mat-card class="min-h-[560px] rounded-[14px] !p-4">
-            <div class="mb-3 flex items-center justify-between">
+            <div class="mb-3">
               <h3 class="m-0 text-base font-bold text-slate-800">Pendientes</h3>
-              <button mat-icon-button (click)="load()"><mat-icon>refresh</mat-icon></button>
             </div>
+
             @for (activity of activities(); track activity.id) {
-              <button
-                class="mb-2.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
-                [class.border-indigo-600]="selectedId() === activity.id"
-                [class.bg-indigo-50]="selectedId() === activity.id"
-                [class.shadow-[inset_0_0_0_1px_#4f46e5]]="selectedId() === activity.id"
+              <button class="mb-2.5 w-full rounded-xl border border-slate-200 bg-white p-3 text-left"
+                [class.border-indigo-600]="selectedActivityId() === activity.id"
+                [class.bg-indigo-50]="selectedActivityId() === activity.id"
+                [class.shadow-[inset_0_0_0_1px_#4f46e5]]="selectedActivityId() === activity.id"
                 (click)="selectActivity(activity.id)">
                 <div class="mb-1.5 flex justify-between gap-2 text-xs text-slate-600">
                   <strong>{{ activity.currentStageName }}</strong>
@@ -132,34 +62,29 @@ interface ActivityDetail {
           </mat-card>
 
           <mat-card class="min-h-[560px] rounded-[14px] !p-4">
-            @if (detailLoading()) {
+            @if (isDetailLoading()) {
               <div class="flex justify-center p-10"><mat-spinner /></div>
             } @else if (selectedActivity()) {
-              <div class="mb-[18px] flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <h3 class="m-0 text-[20px] font-semibold text-slate-900">{{ selectedActivity()!.currentStageName }}</h3>
-                  <p class="mt-1.5 text-[13px] text-slate-500">{{ selectedActivity()!.workflowName }} · {{ selectedActivity()!.code }}</p>
-                </div>
-                <span class="self-start rounded-full bg-blue-100 px-3 py-1.5 text-xs font-bold text-blue-700">{{ selectedActivity()!.status }}</span>
+              <div class="mb-[18px]">
+                <h3 class="m-0 text-[20px] font-semibold text-slate-900">{{ selectedActivity()!.currentStageName }}</h3>
+                <p class="mt-1.5 text-[13px] text-slate-500">{{ selectedActivity()!.workflowName }} · {{ selectedActivity()!.code }}</p>
               </div>
 
-              @if (selectedActivity()!.incomingData.length > 0) {
+              @if (selectedActivity()!.incomingData.length) {
                 <section class="mb-[18px]">
                   <h4 class="mb-3 text-[15px] font-semibold text-slate-800">Datos compartidos</h4>
-                  @for (incoming of selectedActivity()!.incomingData; track incoming.transitionId) {
+                  @for (block of selectedActivity()!.incomingData; track block.transitionId) {
                     <div class="mb-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3">
                       <div class="mb-2.5 flex justify-between gap-2 text-xs text-slate-600">
-                        <strong>{{ incoming.fromStageName }}</strong>
-                        <span>{{ incoming.transitionName || 'Datos recibidos' }}</span>
+                        <strong>{{ block.fromStageName }}</strong>
+                        <span>{{ block.transitionName || "Datos recibidos" }}</span>
                       </div>
-                      @for (field of incoming.fields; track field.name) {
+                      @for (field of block.fields; track field.name) {
                         <div class="mb-2">
                           <label class="mb-1 block text-xs text-slate-500">{{ field.name }}</label>
                           <div class="rounded-[10px] border border-slate-200 bg-white p-2.5 text-[13px] text-slate-900">
-                            @if (isFileValue(field.value)) {
-                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFileAny(field.value)">
-                                {{ fileLabelAny(field.value) }}
-                              </button>
+                            @if (isUploadedFile(field.value)) {
+                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(field.value)">{{ uploadedFileName(field.value) }}</button>
                             } @else {
                               {{ field.value }}
                             }
@@ -171,20 +96,18 @@ interface ActivityDetail {
                 </section>
               }
 
-              @if (currentFormFields().length > 0) {
+              @if (formFields().length) {
                 <section class="mb-[18px]">
-                  <h4 class="mb-3 text-[15px] font-semibold text-slate-800">{{ currentFormTitle() }}</h4>
-                  @for (field of currentFormFields(); track field.id) {
-                    @if (field.type === 'FILE') {
+                  <h4 class="mb-3 text-[15px] font-semibold text-slate-800">{{ formTitle() }}</h4>
+                  @for (field of formFields(); track field.id) {
+                    @if (field.type === "FILE") {
                       <div class="mb-4 flex flex-col gap-2">
                         <label class="text-[13px] font-medium text-slate-700">{{ field.name }}</label>
-                        <input class="text-[13px] text-slate-700" type="file" (change)="onFileSelected(field, $event)">
+                        <input class="text-[13px] text-slate-700" type="file" (change)="uploadFile(field, $event)" />
                         @if (fieldValue(field)) {
                           <div class="text-xs text-indigo-500">
-                            @if (isFileValue(fieldValue(field))) {
-                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFileAny(fieldValue(field))">
-                                {{ fileLabelAny(fieldValue(field)) }}
-                              </button>
+                            @if (isUploadedFile(fieldValue(field))) {
+                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(fieldValue(field))">{{ uploadedFileName(fieldValue(field)) }}</button>
                             } @else {
                               {{ fieldValue(field) }}
                             }
@@ -194,81 +117,25 @@ interface ActivityDetail {
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
                         <mat-label>{{ field.name }}</mat-label>
-                        @switch (field.type) {
-                          @case ('TEXTAREA') {
-                            <textarea matInput rows="3"
-                                      [ngModel]="fieldValue(field)"
-                                      (ngModelChange)="setFieldValue(field, $event)"></textarea>
-                          }
-                          @case ('SELECT') {
-                            <mat-select [ngModel]="fieldValue(field)"
-                                        (ngModelChange)="setFieldValue(field, $event)">
-                              @for (option of field.options || []; track option) {
-                                <mat-option [value]="option">{{ option }}</mat-option>
-                              }
-                            </mat-select>
-                          }
-                          @case ('DATE') {
-                            <input matInput type="date"
-                                   [ngModel]="fieldValue(field)"
-                                   (ngModelChange)="setFieldValue(field, $event)">
-                          }
-                          @case ('NUMBER') {
-                            <input matInput type="number"
-                                   [ngModel]="fieldValue(field)"
-                                   (ngModelChange)="setFieldValue(field, $event)">
-                          }
-                          @case ('CHECKBOX') {
-                            <mat-select [ngModel]="fieldValue(field) ? 'Si' : 'No'"
-                                        (ngModelChange)="setFieldValue(field, $event === 'Si')">
-                              <mat-option value="Si">Sí</mat-option>
-                              <mat-option value="No">No</mat-option>
-                            </mat-select>
-                          }
-                          @case ('RADIO') {
-                            <mat-select [ngModel]="fieldValue(field)"
-                                        (ngModelChange)="setFieldValue(field, $event)">
-                              @for (option of field.options || []; track option) {
-                                <mat-option [value]="option">{{ option }}</mat-option>
-                              }
-                            </mat-select>
-                          }
-                          @default {
-                            <input matInput
-                                   [ngModel]="fieldValue(field)"
-                                   (ngModelChange)="setFieldValue(field, $event)">
-                          }
-                        }
+                        <input matInput [type]="inputType(field.type)" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field, $event)" />
                       </mat-form-field>
                     }
                   }
                 </section>
               }
 
-              @if (selectedActivity()!.availableTransitions.length > 0) {
-                <section>
-                  @if (decisionButtons().length > 0) {
-                    <div class="mt-2 flex gap-3 justify-end">
-                      @for (transition of decisionButtons(); track transition.id; let i = $index) {
-                        <button
-                          mat-flat-button
-                          [color]="isRejectTransition(transition, i) ? 'warn' : 'primary'"
-                          (click)="advanceByButton(transition.id)"
-                          [disabled]="submitting()">
-                          <mat-icon>{{ isRejectTransition(transition, i) ? 'cancel' : 'check_circle' }}</mat-icon>
-                          {{ submitting() ? 'Enviando...' : decisionButtonLabel(transition, i) }}
-                        </button>
-                      }
-                    </div>
-                  } @else {
-                    <div class="mt-2 flex justify-end">
-                      <button mat-flat-button color="primary" (click)="advance()" [disabled]="!primaryTransitionId() || submitting()">
-                        <mat-icon>arrow_forward</mat-icon>
-                        {{ submitting() ? 'Enviando...' : 'Enviar actividad' }}
-                      </button>
-                    </div>
+              @if (visibleTransitions().length) {
+                <div class="mt-2 flex flex-wrap justify-end gap-3">
+                  @for (transition of visibleTransitions(); track transition.id) {
+                    <button mat-flat-button
+                      [color]="transition.branchOutcome === 'reject' ? 'warn' : 'primary'"
+                      [disabled]="isSubmitting()"
+                      (click)="advance(transition.id)">
+                      <mat-icon>{{ transition.branchOutcome === "reject" ? "cancel" : "arrow_forward" }}</mat-icon>
+                      {{ isSubmitting() ? "Enviando..." : (transition.label || transition.name || "Continuar") }}
+                    </button>
                   }
-                </section>
+                </div>
               }
             } @else {
               <div class="flex min-h-full flex-col items-center justify-center gap-2.5 text-center text-slate-400">
@@ -280,202 +147,123 @@ interface ActivityDetail {
         </div>
       }
     </div>
-  `
+  `,
 })
 export class ActivitiesComponent implements OnInit {
   private api = inject(ApiService);
-  private snack = inject(MatSnackBar);
+  private snackBar = inject(MatSnackBar);
 
   activities = signal<ActivitySummary[]>([]);
   selectedActivity = signal<ActivityDetail | null>(null);
-  selectedId = signal<string | null>(null);
-  currentForm = signal<FormDefinition | null>(null);
-  formValues = signal<Record<string, unknown>>({});
-  loading = signal(true);
-  detailLoading = signal(false);
-  submitting = signal(false);
-  selectedTransitionId = '';
+  selectedActivityId = signal<string | null>(null);
+  currentForm = signal<ActivityForm | null>(null);
+  fieldValues = signal<Record<string, unknown>>({});
+  isLoading = signal(true);
+  isDetailLoading = signal(false);
+  isSubmitting = signal(false);
 
-  currentFormFields = computed(() =>
-    [...(this.currentForm()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])]
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-  );
-  currentFormTitle = computed(() =>
-    this.currentForm()?.title || this.selectedActivity()?.formDefinition?.title || 'Formulario'
-  );
-  decisionButtons = computed(() => {
-    const transitions = this.selectedActivity()?.availableTransitions ?? [];
-    return transitions.length > 0 && transitions.every(t => t.kind === 'decision-branch')
-      ? this.dedupeDecisionButtons(transitions)
-      : [];
-  });
-  routingButtons = computed(() => {
-    const transitions = this.selectedActivity()?.availableTransitions ?? [];
-    return this.decisionButtons().length === 0 && transitions.length > 1
-      ? transitions
-      : [];
-  });
-  primaryTransitionId = computed(() =>
-    this.selectedActivity()?.availableTransitions?.[0]?.id ?? ''
-  );
-
-  ngOnInit() {
-    this.load();
-  }
-
-  load() {
-    this.loading.set(true);
-    this.api.get<ActivitySummary[]>('/activities').subscribe({
-      next: activities => {
-        this.activities.set(activities);
-        this.loading.set(false);
-        const currentId = this.selectedId();
-        const nextId = currentId && activities.some(activity => activity.id === currentId)
-          ? currentId
-          : activities[0]?.id;
-        if (nextId) {
-          this.selectActivity(nextId);
-        } else {
-          this.selectedId.set(null);
-          this.selectedActivity.set(null);
-          this.currentForm.set(null);
-        }
-      },
-      error: () => {
-        this.loading.set(false);
-        this.snack.open('Error al cargar actividades', '', { duration: 3000 });
-      }
-    });
-  }
-
-  selectActivity(id: string) {
-    this.selectedId.set(id);
-    this.detailLoading.set(true);
-    this.currentForm.set(null);
-    this.selectedTransitionId = '';
-    this.api.get<ActivityDetail>(`/activities/${id}`).subscribe({
-      next: activity => {
-        this.selectedActivity.set(activity);
-        this.formValues.set({ ...(activity.formData ?? {}) });
-        this.api.get<FormDefinition>(`/forms/stage/${activity.currentStageId}`).subscribe({
-          next: form => {
-            this.currentForm.set(form);
-            this.detailLoading.set(false);
-          },
-          error: () => {
-            this.currentForm.set(activity.formDefinition ?? null);
-            this.detailLoading.set(false);
-          }
-        });
-      },
-      error: (err) => {
-        this.detailLoading.set(false);
-        this.snack.open(err.error?.message || 'Error al cargar la actividad', '', { duration: 3000 });
-      }
-    });
-  }
-
-  fieldValue(field: FormField) {
-    return this.formValues()[field.name] ?? '';
-  }
-
-  setFieldValue(field: FormField, value: unknown) {
-    this.formValues.update(values => ({ ...values, [field.name]: value }));
-  }
-
-  onFileSelected(field: FormField, event: Event) {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.[0] ?? null;
-    if (!file) return;
-
-    const body = new FormData();
-    body.append('file', file);
-    this.api.post<FileValue>('/files/upload', body).subscribe({
-      next: uploaded => this.setFieldValue(field, uploaded),
-      error: () => this.snack.open('Error al subir archivo', '', { duration: 3000 })
-    });
-  }
-
-  isFileValue(value: unknown): value is FileValue {
-    return !!value && typeof value === 'object' && 'storedName' in (value as Record<string, unknown>);
-  }
-
-  fileLabel(file: FileValue) {
-    return file.fileName || file.storedName;
-  }
-
-  fileLabelAny(value: unknown) {
-    return this.isFileValue(value) ? this.fileLabel(value) : '';
-  }
-
-  downloadFile(file: FileValue) {
-    const path = file.downloadPath || `/files/${file.storedName}/download`;
-    const separator = path.includes('?') ? '&' : '?';
-    const filename = encodeURIComponent(this.fileLabel(file));
-    window.open(`${environment.apiUrl}${path}${separator}filename=${filename}`, '_blank');
-  }
-
-  downloadFileAny(value: unknown) {
-    if (!this.isFileValue(value)) return;
-    this.downloadFile(value);
-  }
-
-  advance() {
-    const activity = this.selectedActivity();
-    const transitionId = this.primaryTransitionId();
-    if (!activity || !transitionId) return;
-
-    this.submitAdvance(activity.id, transitionId);
-  }
-
-  advanceByButton(transitionId: string) {
-    const activity = this.selectedActivity();
-    if (!activity) return;
-    this.submitAdvance(activity.id, transitionId);
-  }
-
-  decisionButtonLabel(option: Transition, index: number): string {
-    return (option.label || option.name || '').trim() || `Opcion ${index + 1}`;
-  }
-
-  isRejectTransition(option: Transition, index: number): boolean {
-    const normalized = this.decisionButtonLabel(option, index).toLowerCase();
-    return option.branchOutcome === 'reject'
-      || normalized === 'no'
-      || normalized === 'rechazar'
-      || normalized === 'rechazado';
-  }
-
-  routingButtonLabel(option: Transition): string {
-    return option.targetStageName || option.label || option.name || 'Continuar';
-  }
-
-  private dedupeDecisionButtons(transitions: Transition[]) {
+  formFields = computed(() => [...(this.currentForm()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0)));
+  formTitle = computed(() => this.currentForm()?.title || this.selectedActivity()?.formDefinition?.title || "Formulario");
+  visibleTransitions = computed(() => {
     const seen = new Set<string>();
-    return transitions.filter((transition, index) => {
-      const key = this.decisionButtonLabel(transition, index).toLowerCase();
+    return (this.selectedActivity()?.availableTransitions ?? []).filter((transition) => {
+      const key = (transition.label || transition.name || "Continuar").trim().toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+  });
+
+  ngOnInit() { this.loadActivities(); }
+
+  loadActivities() {
+    this.isLoading.set(true);
+    this.api.get<ActivitySummary[]>("/activities").subscribe({
+      next: (activities) => {
+        this.activities.set(activities);
+        this.isLoading.set(false);
+        const selectedId = activities.some((activity) => activity.id === this.selectedActivityId()) ? this.selectedActivityId() : activities[0]?.id ?? null;
+        if (!selectedId) {
+          this.selectedActivityId.set(null);
+          this.selectedActivity.set(null);
+          this.currentForm.set(null);
+          return;
+        }
+        this.selectActivity(selectedId);
+      },
+      error: () => {
+        this.isLoading.set(false);
+        this.isDetailLoading.set(false);
+        this.snackBar.open("Error al cargar actividades", "", { duration: 3000 });
+      },
+    });
   }
 
-  private submitAdvance(activityId: string, transitionId: string) {
-    this.submitting.set(true);
-    this.api.post(`/procedures/${activityId}/advance`, {
-      transitionId,
-      formData: this.formValues()
-    }).subscribe({
-      next: () => {
-        this.submitting.set(false);
-        this.currentForm.set(null);
-        this.snack.open('Actividad enviada', '', { duration: 2500 });
-        this.load();
+  selectActivity(activityId: string) {
+    this.selectedActivityId.set(activityId);
+    this.isDetailLoading.set(true);
+    this.currentForm.set(null);
+    this.api.get<ActivityDetail>(`/activities/${activityId}`).subscribe({
+      next: (activity) => {
+        this.selectedActivity.set(activity);
+        this.fieldValues.set({ ...(activity.formData ?? {}) });
+        this.api.get<ActivityForm>(`/forms/stage/${activity.currentStageId}`).subscribe({
+          next: (form) => {
+            this.currentForm.set(form);
+            this.isDetailLoading.set(false);
+          },
+          error: () => {
+            this.currentForm.set(activity.formDefinition ?? null);
+            this.isDetailLoading.set(false);
+          },
+        });
       },
-      error: (err) => {
-        this.submitting.set(false);
-        this.snack.open(err.error?.message || 'Error al enviar actividad', '', { duration: 3000 });
-      }
+      error: (error) => {
+        this.isDetailLoading.set(false);
+        this.snackBar.open(error.error?.message || "Error al cargar la actividad", "", { duration: 3000 });
+      },
     });
+  }
+
+  advance(transitionId: string) {
+    const activityId = this.selectedActivity()?.id;
+    if (!activityId) return;
+    this.isSubmitting.set(true);
+    this.api.post(`/procedures/${activityId}/advance`, { transitionId, formData: this.fieldValues() }).subscribe({
+      next: () => {
+        this.isSubmitting.set(false);
+        this.currentForm.set(null);
+        this.snackBar.open("Actividad enviada", "", { duration: 2500 });
+        this.loadActivities();
+      },
+      error: (error) => {
+        this.isSubmitting.set(false);
+        this.snackBar.open(error.error?.message || "Error al enviar actividad", "", { duration: 3000 });
+      },
+    });
+  }
+
+  fieldValue(field: ActivityFormField) { return this.fieldValues()[field.name] ?? ""; }
+  setFieldValue(field: ActivityFormField, value: unknown) { this.fieldValues.update((current) => ({ ...current, [field.name]: value })); }
+  inputType(type: string) { return type === "DATE" ? "date" : type === "NUMBER" ? "number" : type === "CORREO" ? "email" : "text"; }
+  isUploadedFile(value: unknown): value is UploadedFile { return !!value && typeof value === "object" && "storedName" in (value as Record<string, unknown>); }
+  uploadedFileName(value: unknown) { return this.isUploadedFile(value) ? value.fileName || value.storedName : ""; }
+
+  uploadFile(field: ActivityFormField, event: Event) {
+    const file = (event.target as HTMLInputElement | null)?.files?.[0];
+    if (!file) return;
+    const body = new FormData();
+    body.append("file", file);
+    this.api.post<UploadedFile>("/files/upload", body).subscribe({
+      next: (uploaded) => this.setFieldValue(field, uploaded),
+      error: () => this.snackBar.open("Error al subir archivo", "", { duration: 3000 }),
+    });
+  }
+
+  downloadFile(value: unknown) {
+    if (!this.isUploadedFile(value)) return;
+    const path = value.downloadPath || `/files/${value.storedName}/download`;
+    const separator = path.includes("?") ? "&" : "?";
+    window.open(`${environment.apiUrl}${path}${separator}filename=${encodeURIComponent(this.uploadedFileName(value))}`, "_blank");
   }
 }

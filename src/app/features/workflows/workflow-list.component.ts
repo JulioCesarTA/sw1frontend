@@ -13,20 +13,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
-interface Workflow {
-  id: string;
-  name: string;
-  description: string;
-  companyId?: string;
-  companyName?: string;
-  createdAt: string;
-  _count: { stages: number; procedures: number };
-}
-
-interface Company {
-  id: string;
-  name: string;
-}
+interface Workflow { id: string; name: string; description: string; companyId?: string; companyName?: string; _count: { stages: number; procedures: number } }
+interface Company { id: string; name: string }
 
 @Component({
   selector: 'app-workflow-list',
@@ -36,35 +24,27 @@ interface Company {
     <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-6 py-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-3xl font-bold text-slate-900">Workflows</h2>
-        @if (auth.isAdmin()) {
-          <button mat-flat-button color="primary" (click)="openCreate()"><mat-icon>add</mat-icon> Nuevo Workflow</button>
-        }
+        @if (auth.isAdmin()) { <button mat-flat-button color="primary" (click)="openForm()"><mat-icon>add</mat-icon> Nuevo Workflow</button> }
       </div>
 
-      @if (loading()) {
-        <div class="flex justify-center py-16"><mat-spinner /></div>
-      } @else {
+      @if (loading()) { <div class="flex justify-center py-16"><mat-spinner /></div> } @else {
         <div class="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
           @for (wf of workflows(); track wf.id) {
             <mat-card class="rounded-3xl p-5 shadow-sm">
-              <div class="mb-3 flex items-start justify-between gap-3">
-                <div>
-                  <h3 class="text-lg font-semibold text-slate-900">{{ wf.name }}</h3>
-                  <p class="mt-1 text-sm text-slate-500">{{ wf.description }}</p>
-                  <small class="mt-2 inline-block text-xs font-semibold uppercase tracking-wide text-indigo-600">{{ wf.companyName || companyName(wf.companyId) }}</small>
-                </div>
+              <div class="mb-3">
+                <h3 class="text-lg font-semibold text-slate-900">{{ wf.name }}</h3>
+                <p class="mt-1 text-sm text-slate-500">{{ wf.description }}</p>
+                <small class="mt-2 inline-block text-xs font-semibold uppercase tracking-wide text-indigo-600">{{ wf.companyName || companyName(wf.companyId) }}</small>
               </div>
-
               <div class="mb-4 flex flex-wrap gap-4 text-sm text-slate-500">
                 <span class="flex items-center gap-1"><mat-icon class="!h-4 !w-4 !text-base">layers</mat-icon>{{ wf._count.stages }} etapas</span>
                 <span class="flex items-center gap-1"><mat-icon class="!h-4 !w-4 !text-base">description</mat-icon>{{ wf._count.procedures }} tramites</span>
               </div>
-
               <div class="flex items-center justify-between">
                 <button mat-stroked-button [routerLink]="[wf.id, 'editor']"><mat-icon>edit</mat-icon> Editor</button>
                 @if (auth.isAdmin()) {
                   <div>
-                    <button mat-icon-button (click)="openEdit(wf)"><mat-icon>drive_file_rename_outline</mat-icon></button>
+                    <button mat-icon-button (click)="openForm(wf)"><mat-icon>drive_file_rename_outline</mat-icon></button>
                     <button mat-icon-button color="warn" (click)="delete(wf)"><mat-icon>delete</mat-icon></button>
                   </div>
                 }
@@ -86,17 +66,13 @@ interface Company {
             <mat-form-field appearance="outline" class="w-full"><mat-label>Nombre</mat-label><input matInput [(ngModel)]="formName"></mat-form-field>
             <mat-form-field appearance="outline" class="w-full"><mat-label>Descripcion</mat-label><textarea matInput rows="3" [(ngModel)]="formDesc"></textarea></mat-form-field>
             @if (auth.isSuperAdmin()) {
-              <mat-form-field appearance="outline" class="w-full">
-                <mat-label>Empresa</mat-label>
+              <mat-form-field appearance="outline" class="w-full"><mat-label>Empresa</mat-label>
                 <mat-select [(ngModel)]="formCompanyId">
-                  @for (company of companies(); track company.id) { <mat-option [value]="company.id">{{ company.name }}</mat-option> }
+                  @for (c of companies(); track c.id) { <mat-option [value]="c.id">{{ c.name }}</mat-option> }
                 </mat-select>
               </mat-form-field>
             } @else {
-              <mat-form-field appearance="outline" class="w-full">
-                <mat-label>Empresa</mat-label>
-                <input matInput [value]="companyName(formCompanyId)" readonly>
-              </mat-form-field>
+              <mat-form-field appearance="outline" class="w-full"><mat-label>Empresa</mat-label><input matInput [value]="companyName(formCompanyId)" readonly></mat-form-field>
             }
             <div class="mt-4 flex justify-end gap-2">
               <button mat-button (click)="showForm.set(false)">Cancelar</button>
@@ -118,46 +94,30 @@ export class WorkflowListComponent implements OnInit {
   loading = signal(true);
   showForm = signal(false);
   editId = signal<string | null>(null);
-  formName = '';
-  formDesc = '';
-  formCompanyId = '';
+  formName = ''; formDesc = ''; formCompanyId = '';
 
   ngOnInit() { this.load(); }
 
   load() {
-    this.api.get<Company[]>('/companies').subscribe({ next: companies => this.companies.set(companies) });
-    this.api.get<Workflow[]>('/workflows').subscribe({
-      next: workflows => { this.workflows.set(workflows); this.loading.set(false); },
-      error: () => this.loading.set(false)
-    });
+    this.api.get<Company[]>('/companies').subscribe({ next: c => this.companies.set(c) });
+    this.api.get<Workflow[]>('/workflows').subscribe({ next: w => { this.workflows.set(w); this.loading.set(false); }, error: () => this.loading.set(false) });
   }
 
-  openCreate() {
-    this.editId.set(null);
-    this.formName = '';
-    this.formDesc = '';
-    this.formCompanyId = this.auth.user()?.companyId || this.companies()[0]?.id || '';
+  openForm(wf?: Workflow) {
+    this.editId.set(wf?.id ?? null);
+    this.formName = wf?.name ?? '';
+    this.formDesc = wf?.description ?? '';
+    this.formCompanyId = wf?.companyId ?? this.auth.user()?.companyId ?? this.companies()[0]?.id ?? '';
     this.showForm.set(true);
   }
 
-  openEdit(workflow: Workflow) {
-    this.editId.set(workflow.id);
-    this.formName = workflow.name;
-    this.formDesc = workflow.description || '';
-    this.formCompanyId = workflow.companyId || this.auth.user()?.companyId || this.companies()[0]?.id || '';
-    this.showForm.set(true);
-  }
-
-  companyName(id?: string) {
-    return this.companies().find(company => company.id === id)?.name || '';
-  }
+  companyName(id?: string) { return this.companies().find(c => c.id === id)?.name || ''; }
 
   save() {
-    const body = { name: this.formName, description: this.formDesc, companyId: this.formCompanyId };
-    const request = this.editId()
-      ? this.api.patch(`/workflows/${this.editId()}`, body)
-      : this.api.post('/workflows', body);
-    request.subscribe({
+    const req = this.editId()
+      ? this.api.patch(`/workflows/${this.editId()}`, { name: this.formName, description: this.formDesc, companyId: this.formCompanyId })
+      : this.api.post('/workflows', { name: this.formName, description: this.formDesc, companyId: this.formCompanyId });
+    req.subscribe({
       next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error al guardar', '', { duration: 3000 })
     });
@@ -165,9 +125,6 @@ export class WorkflowListComponent implements OnInit {
 
   delete(wf: Workflow) {
     if (!confirm(`Eliminar "${wf.name}"?`)) return;
-    this.api.delete(`/workflows/${wf.id}`).subscribe({
-      next: () => { this.load(); this.snack.open('Eliminado', '', { duration: 2000 }); },
-      error: () => this.snack.open('Error al eliminar', '', { duration: 3000 })
-    });
+    this.api.delete(`/workflows/${wf.id}`).subscribe({ next: () => { this.load(); this.snack.open('Eliminado', '', { duration: 2000 }); }, error: () => this.snack.open('Error al eliminar', '', { duration: 3000 }) });
   }
 }

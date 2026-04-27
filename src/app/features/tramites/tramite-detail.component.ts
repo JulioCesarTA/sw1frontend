@@ -205,7 +205,7 @@ export class TramiteDetailComponent implements OnInit {
   advance(transitionId?: string) {
     const id = transitionId ?? this.primaryTransitionId();
     if (!id) return;
-    this.api.post(`/tramites/${this.id}/advance`, { transitionId: id, comment: this.comment, formData: this.formValues() }).subscribe({
+    this.api.post(`/activities/${this.id}/advance`, { transitionId: id, comment: this.comment, formData: this.formValues() }).subscribe({
       next: (p: any) => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); this.comment = ''; this.loadForm(p.currentStageId); this.snack.open('Tramite avanzado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
     });
@@ -214,7 +214,7 @@ export class TramiteDetailComponent implements OnInit {
   reject() {
     const reason = prompt('Motivo del rechazo:');
     if (reason === null) return;
-    this.api.post(`/tramites/${this.id}/reject`, { reason }).subscribe({
+    this.api.post(`/activities/${this.id}/reject`, { reason }).subscribe({
       next: (p: any) => { this.tramite.update(prev => prev ? { ...prev, status: p.status } : prev); this.snack.open('Rechazado', '', { duration: 2000 }); },
       error: () => this.snack.open('Error al rechazar', '', { duration: 3000 })
     });

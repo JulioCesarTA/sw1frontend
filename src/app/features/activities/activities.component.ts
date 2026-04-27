@@ -221,7 +221,7 @@ export class ActivitiesComponent implements OnInit {
     const activityId = this.selectedActivity()?.id;
     if (!activityId) return;
     this.isSubmitting.set(true);
-    this.api.post(`/tramites/${activityId}/advance`, { transitionId, formData: this.fieldValues() }).subscribe({
+    this.api.post(`/activities/${activityId}/advance`, { transitionId, formData: this.fieldValues() }).subscribe({
       next: () => {
         this.isSubmitting.set(false);
         this.formularioActual.set(null);

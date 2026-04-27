@@ -45,7 +45,6 @@ interface Company { id: string; name: string }
                 @if (auth.isAdmin()) {
                   <div>
                     <button mat-icon-button (click)="openForm(wf)"><mat-icon>drive_file_rename_outline</mat-icon></button>
-                    <button mat-icon-button color="warn" (click)="delete(wf)"><mat-icon>delete</mat-icon></button>
                   </div>
                 }
               </div>
@@ -121,10 +120,5 @@ export class WorkflowListComponent implements OnInit {
       next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error al guardar', '', { duration: 3000 })
     });
-  }
-
-  delete(wf: Workflow) {
-    if (!confirm(`Eliminar "${wf.name}"?`)) return;
-    this.api.delete(`/workflows/${wf.id}`).subscribe({ next: () => { this.load(); this.snack.open('Eliminado', '', { duration: 2000 }); }, error: () => this.snack.open('Error al eliminar', '', { duration: 3000 }) });
   }
 }

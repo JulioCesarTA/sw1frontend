@@ -1,0 +1,56 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 5
+skinparam sequenceParticipant underline
+
+actor "Usuario / Admin" as User
+
+participant "DepartmentListComponent\n(Angular)" as UI
+participant "ApiService" as Api
+participant "DepartmentController\nGET /departments" as Controller
+participant "DepartmentService" as Service
+participant "DepartmentRepository" as Repo
+database "MongoDB\n(departments)" as DB
+
+== Listar Departamentos ==
+
+User -> UI : Navega a /departments
+activate UI
+
+UI -> UI : ngOnInit()
+UI -> UI : load()
+
+UI -> Api : get<Department[]>('/departments')
+activate Api
+Api -> Controller : GET /departments + JWT
+activate Controller
+
+Controller -> Service : findAll(companyId)
+activate Service
+
+alt companyId != null && !companyId.isBlank()
+    Service -> Repo : findByCompanyIdOrderByNameAsc(companyId)
+else Sin filtro
+    Service -> Repo : findAll()
+end
+
+activate Repo
+Repo -> DB : db.departments.find(...)
+activate DB
+DB --> Repo : List<Department>
+deactivate DB
+Repo --> Service : List<Department>
+deactivate Repo
+Service --> Controller : List<Department>
+deactivate Service
+Controller --> Api : 200 OK - List<Department>
+deactivate Controller
+Api --> UI : next(v)
+deactivate Api
+
+UI -> UI : departments.set(v)
+UI -> UI : loading.set(false)
+UI --> User : Muestra tabla de departamentos
+deactivate UI
+
+@enduml

@@ -22,7 +22,7 @@ import {
 
 type NodeType = 'start' | 'process' | 'decision' | 'bifurcasion' | 'join' | 'end' | 'loop';
 type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'EMAIL';
-type ForwardMode = 'all' | 'selected' | 'files-only' | 'none';
+type ForwardMode = 'selected' | 'none';
 
 interface Workflow {
   id: string;
@@ -70,7 +70,6 @@ interface Stage {
 interface ForwardConfig {
   mode?: ForwardMode;
   fieldNames?: string[];
-  includeFiles?: boolean;
 }
 
 interface Transition {
@@ -119,9 +118,7 @@ interface StageForm {
 }
 
 interface TransitionForm {
-  name: string;
   mode: ForwardMode;
-  includeFiles: boolean;
   fieldNames: string[];
 }
 
@@ -589,25 +586,16 @@ interface BottleneckResult {
                   {{ sourceStageName(selectedTransition()!) }} -> {{ targetStageName(selectedTransition()!) }}
                 </div>
 
-                <mat-form-field appearance="outline" class="w-full">
-                  <mat-label>Nombre de la conexion</mat-label>
-                  <input matInput [(ngModel)]="transitionForm.name">
-                </mat-form-field>
+                  <mat-form-field appearance="outline" class="w-full">
+                    <mat-label>Que parte del formulario pasa</mat-label>
+                    <mat-select [(ngModel)]="transitionForm.mode">
+                      <mat-option value="none">No pasar campos</mat-option>
+                      <mat-option value="selected">Seleccionar campos</mat-option>
+                    </mat-select>
+                  </mat-form-field>
 
-                <mat-form-field appearance="outline" class="w-full">
-                  <mat-label>Que parte del formulario pasa</mat-label>
-                  <mat-select [(ngModel)]="transitionForm.mode">
-                    <mat-option value="all">Todo</mat-option>
-                    <mat-option value="selected">Solo campos seleccionados</mat-option>
-                    <mat-option value="files-only">Solo archivos</mat-option>
-                    <mat-option value="none">Nada</mat-option>
-                  </mat-select>
-                </mat-form-field>
-
-                <mat-checkbox class="mb-2" [(ngModel)]="transitionForm.includeFiles">Incluir archivos</mat-checkbox>
-
-                @if (availableForwardFields().length) {
-                  <div class="rounded-2xl border border-slate-200 p-3">
+                  @if (availableForwardFields().length) {
+                    <div class="rounded-2xl border border-slate-200 p-3">
                     <div class="mb-2 text-sm font-semibold text-slate-900">Campos del formulario A</div>
                     <div class="grid gap-2">
                       @for (field of availableForwardFields(); track field.id) {
@@ -830,19 +818,12 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     if (!transition) return [] as ResolvedStageField[];
     return this.resolveFieldsAvailableAtStage(transition.fromStageId);
   });
-  resolvedForwardFields = computed(() => {
-    const fields: ResolvedStageField[] = this.availableForwardFields();
-    switch (this.transitionForm.mode) {
-      case 'none':
-        return [];
-      case 'files-only':
-        return fields.filter((field: ResolvedStageField) => field.type === 'FILE');
-      case 'selected':
-        return fields.filter((field: ResolvedStageField) => this.transitionForm.fieldNames.includes(field.name));
-      default:
-        return fields;
-    }
-  });
+    resolvedForwardFields = computed(() => {
+      const fields: ResolvedStageField[] = this.availableForwardFields();
+      return this.transitionForm.mode === 'selected'
+        ? fields.filter((field: ResolvedStageField) => this.transitionForm.fieldNames.includes(field.name))
+        : [];
+    });
   incomingFieldsForSelectedStage = computed(() => {
     const stage = this.selectedStage();
     const workflow = this.workflow();
@@ -995,9 +976,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     this.sidebarTab.set('inspector');
     this.ensureReachableFormsLoaded(transition.fromStageId);
     this.transitionForm = {
-      name: transition.name || '',
-      mode: transition.forwardConfig?.mode || 'all',
-      includeFiles: Boolean(transition.forwardConfig?.includeFiles),
+      mode: transition.forwardConfig?.mode === 'selected' ? 'selected' : 'none',
       fieldNames: [...(transition.forwardConfig?.fieldNames ?? [])]
     };
   }
@@ -1094,16 +1073,14 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   }
 
   saveTransition() {
-    const transition = this.selectedTransition();
-    if (!transition) return;
-    this.api.patch<Transition>(`/workflow-transitions/${transition.id}`, {
-      name: this.transitionForm.name,
-      forwardConfig: {
-        mode: this.transitionForm.mode,
-        includeFiles: this.transitionForm.includeFiles,
-        fieldNames: this.transitionForm.mode === 'selected' ? this.transitionForm.fieldNames : []
-      }
-    }).subscribe({
+      const transition = this.selectedTransition();
+      if (!transition) return;
+      this.api.patch<Transition>(`/workflow-transitions/${transition.id}`, {
+        forwardConfig: {
+          mode: this.transitionForm.mode,
+          fieldNames: this.transitionForm.mode === 'selected' ? this.transitionForm.fieldNames : []
+        }
+      }).subscribe({
       next: saved => {
         this.upsertTransition(saved);
         this.queueWorkyRefresh();
@@ -1808,13 +1785,12 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
 
   private resolveTransitionFields(transition: Transition, visited = new Set<string>()): ResolvedStageField[] {
     const sourceFields: ResolvedStageField[] = this.resolveFieldsAvailableAtStage(transition.fromStageId, visited);
-    const mode = transition.forwardConfig?.mode || 'all';
+    const mode = transition.forwardConfig?.mode || 'none';
     const selectedNames = new Set(transition.forwardConfig?.fieldNames ?? []);
     return sourceFields.filter((field: ResolvedStageField) => {
       if (mode === 'none') return false;
-      if (mode === 'files-only') return field.type === 'FILE';
       if (mode === 'selected') return selectedNames.has(field.name);
-      return true;
+      return false;
     });
   }
 
@@ -1887,9 +1863,13 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   private defaultTransitionName(source?: Stage) {
     if (!source) return '';
     const type = this.nodeType(source);
-    if (type === 'decision' || type === 'loop') {
+    if (type === 'decision') {
       const outgoing = this.workflow()?.transitions.filter(item => item.fromStageId === source.id).length || 0;
-      return outgoing === 0 ? (source.trueLabel || 'Si') : (source.falseLabel || 'No');
+      return outgoing === 0 ? 'Aceptar' : 'Rechazar';
+    }
+    if (type === 'loop') {
+      const outgoing = this.workflow()?.transitions.filter(item => item.fromStageId === source.id).length || 0;
+      return outgoing === 0 ? 'Aceptar' : 'Repetir';
     }
     return '';
   }
@@ -1916,11 +1896,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   }
 
   private emptyTransitionForm(): TransitionForm {
-    return {
-      name: '',
-      mode: 'all',
-      includeFiles: false,
-      fieldNames: []
-    };
-  }
+      return {
+        mode: 'none',
+        fieldNames: []
+      };
+    }
 }

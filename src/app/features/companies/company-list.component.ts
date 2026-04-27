@@ -25,7 +25,6 @@ interface Company {
         <h2 class="text-3xl font-bold text-slate-900">Empresas</h2>
         <button mat-flat-button color="primary" (click)="openCreate()"><mat-icon>add</mat-icon> Nueva empresa</button>
       </div>
-
       @if (loading()) {
         <div class="flex justify-center py-16"><mat-spinner /></div>
       } @else {
@@ -41,7 +40,6 @@ interface Company {
                     <td class="px-4 py-3">{{ company.name }}</td>
                     <td class="px-4 py-3">
                       <button mat-icon-button (click)="openEdit(company)"><mat-icon>edit</mat-icon></button>
-                      <button mat-icon-button color="warn" (click)="remove(company)"><mat-icon>delete</mat-icon></button>
                     </td>
                   </tr>
                 } @empty {
@@ -84,9 +82,5 @@ export class CompanyListComponent implements OnInit {
   save() {
     const req = this.editId() ? this.api.patch(`/companies/${this.editId()}`, this.form) : this.api.post('/companies', this.form);
     req.subscribe({ next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); }, error: (e) => this.snack.open(e.error?.message || 'Error', '', { duration: 3000 }) });
-  }
-  remove(company: Company) {
-    if (!confirm(`Eliminar "${company.name}"?`)) return;
-    this.api.delete(`/companies/${company.id}`).subscribe({ next: () => { this.load(); this.snack.open('Eliminada', '', { duration: 2000 }); }, error: () => this.snack.open('Error al eliminar', '', { duration: 3000 }) });
   }
 }

@@ -77,7 +77,6 @@ interface JobRole {
                     <td class="px-4 py-3">{{ companyName(u.companyId) }}</td>
                     <td class="px-4 py-3">
                       <button mat-icon-button (click)="openEdit(u)"><mat-icon>edit</mat-icon></button>
-                      <button mat-icon-button color="warn" (click)="remove(u)"><mat-icon>delete</mat-icon></button>
                     </td>
                   </tr>
                 }
@@ -268,14 +267,6 @@ export class UserListComponent implements OnInit {
     request.subscribe({
       next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
-    });
-  }
-
-  remove(user: User) {
-    if (!confirm(`Eliminar a ${user.name}?`)) return;
-    this.api.delete(`/users/${user.id}`).subscribe({
-      next: () => { this.load(); this.snack.open('Eliminado', '', { duration: 2000 }); },
-      error: () => this.snack.open('Error al eliminar', '', { duration: 3000 })
     });
   }
 }

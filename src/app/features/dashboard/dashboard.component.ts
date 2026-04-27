@@ -46,10 +46,10 @@ export class DashboardComponent implements OnInit {
       this.loading.set(false);
       return;
     }
-
-    this.api.get<Company>(`/companies/${companyId}`).subscribe({
-      next: company => {
-        this.companyName.set(company.name || 'tu empresa');
+    this.api.get<Company[]>('/companies').subscribe({
+      next: companies => {
+        const company = companies.find(item => item.id === companyId);
+        this.companyName.set(company?.name || 'tu empresa');
         this.loading.set(false);
       },
       error: () => {

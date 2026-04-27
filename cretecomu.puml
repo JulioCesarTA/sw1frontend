@@ -1,0 +1,46 @@
+@startuml
+skinparam usecaseBackgroundColor white
+skinparam usecaseBorderColor black
+skinparam usecaseBorderThickness 1
+skinparam usecaseFontSize 11
+skinparam usecaseFontColor black
+skinparam actorStyle default
+skinparam actorBackgroundColor white
+skinparam actorBorderColor black
+skinparam ArrowColor black
+skinparam ArrowThickness 1
+
+actor "<u>:Usuario\n/ Admin</u>" as User
+
+("<u>:DepartmentList\nComponent</u>") as UI
+("<u>:DepartmentController</u>") as Controller
+("<u>:DepartmentService</u>") as Service
+("<u>:CompanyRepository</u>") as CompanyRepo
+("<u>:DepartmentRepository</u>") as Repo
+("<u>:MongoDB</u>") as DB
+
+User --> UI            : 1: Click "Nuevo departamento"
+UI --> User            : 2: showForm.set(true)
+User --> UI            : 3: Ingresa datos / Click "Guardar"
+UI --> UI              : 4: openCreate() / save()
+UI --> Controller      : 5: POST /departments {companyId, name} + JWT
+Controller --> Service : 6: create(body)
+Service --> CompanyRepo : 7: findById(companyId)
+CompanyRepo --> DB     : 8: SELECT * FROM companies WHERE id=?
+DB --> CompanyRepo     : 9: Optional<Company>
+CompanyRepo --> Service : 10: Optional[Company]
+Service --> Service    : 11: new Department()\n.setCompanyId() / .setName()
+Service --> Repo       : 12: save(department)
+Repo --> DB            : 12.1: INSERT INTO departments {companyId, name}
+DB --> Repo            : 12.2: Department (con id generado)
+Repo --> Service       : 13: Department
+Service --> Controller : 14: Department
+Controller --> UI      : 15: 201 Created – Department
+UI --> User            : 16: snack.open('Guardado') / load()
+
+note right of Service
+  [alt] Company no encontrada:
+  ← 400 "Empresa no encontrada"
+end note
+
+@enduml

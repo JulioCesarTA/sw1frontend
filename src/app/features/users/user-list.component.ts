@@ -19,7 +19,7 @@ interface User {
   role: string;
   companyId?: string;
   departmentId?: string;
-  jobTitle?: string;
+  jobRoleId?: string;
 }
 
 interface Company {
@@ -72,7 +72,7 @@ interface JobRole {
                   <tr class="border-t border-slate-100">
                     <td class="px-4 py-3">{{ u.name }}</td>
                     <td class="px-4 py-3">{{ u.email }}</td>
-                    <td class="px-4 py-3">{{ u.jobTitle || '-' }}</td>
+                    <td class="px-4 py-3">{{ jobRoleName(u.jobRoleId) }}</td>
                     <td class="px-4 py-3">{{ departmentName(u.departmentId) }}</td>
                     <td class="px-4 py-3">{{ companyName(u.companyId) }}</td>
                     <td class="px-4 py-3">
@@ -134,10 +134,10 @@ interface JobRole {
             </mat-form-field>
             <mat-form-field appearance="outline" class="w-full">
               <mat-label>Cargo</mat-label>
-              <mat-select [(ngModel)]="form.jobTitle" [disabled]="availableJobTitles().length === 0">
+              <mat-select [(ngModel)]="form.jobRoleId" [disabled]="availableJobRoles().length === 0">
                 <mat-option value="">Sin cargo</mat-option>
-                @for (jobTitle of availableJobTitles(); track jobTitle) {
-                  <mat-option [value]="jobTitle">{{ jobTitle }}</mat-option>
+                @for (jr of availableJobRoles(); track jr.id) {
+                  <mat-option [value]="jr.id">{{ jr.name }}</mat-option>
                 }
               </mat-select>
             </mat-form-field>
@@ -163,7 +163,7 @@ export class UserListComponent implements OnInit {
   loading = signal(true);
   showForm = signal(false);
   editId = signal<string | null>(null);
-  form = { name: '', email: '', password: '', companyId: '', departmentId: '', jobTitle: '' };
+  form = { name: '', email: '', password: '', companyId: '', departmentId: '', jobRoleId: '' };
 
   ngOnInit() { this.load(); }
 
@@ -196,22 +196,26 @@ export class UserListComponent implements OnInit {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  availableJobTitles() {
+  availableJobRoles() {
     if (!this.form.departmentId) return [];
     return this.jobRoles()
-      .filter(jobRole => jobRole.departmentId === this.form.departmentId)
-      .map(jobRole => jobRole.name)
-      .sort((a, b) => a.localeCompare(b));
+      .filter(jr => jr.departmentId === this.form.departmentId)
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  jobRoleName(id?: string) {
+    if (!id) return '-';
+    return this.jobRoles().find(jr => jr.id === id)?.name || '-';
   }
 
   onCompanyChange() {
     this.form.departmentId = '';
-    this.form.jobTitle = '';
+    this.form.jobRoleId = '';
     this.loadJobRoles();
   }
 
   onDepartmentChange() {
-    this.form.jobTitle = '';
+    this.form.jobRoleId = '';
     this.loadJobRoles();
   }
 
@@ -223,7 +227,7 @@ export class UserListComponent implements OnInit {
       password: '',
       companyId: this.auth.user()?.companyId || this.companies()[0]?.id || '',
       departmentId: '',
-      jobTitle: ''
+      jobRoleId: ''
     };
     this.loadJobRoles();
     this.showForm.set(true);
@@ -237,7 +241,7 @@ export class UserListComponent implements OnInit {
       password: '',
       companyId: this.auth.user()?.companyId || user.companyId || '',
       departmentId: user.departmentId || '',
-      jobTitle: user.jobTitle || ''
+      jobRoleId: user.jobRoleId || ''
     };
     this.loadJobRoles();
     this.showForm.set(true);
@@ -257,7 +261,7 @@ export class UserListComponent implements OnInit {
       email: this.form.email,
       companyId: this.form.companyId,
       departmentId: this.form.departmentId || null,
-      jobTitle: this.form.jobTitle || null
+      jobRoleId: this.form.jobRoleId || null
     };
     if (!this.editId() && this.form.password) body['password'] = this.form.password;
     const request = this.editId() ? this.api.patch(`/users/${this.editId()}`, body) : this.api.post('/users', body);

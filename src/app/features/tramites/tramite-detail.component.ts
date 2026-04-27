@@ -7,7 +7,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/services/api.service';
@@ -18,46 +17,49 @@ interface TransitionOption { id: string; fromStageId: string; toStageId: string;
 interface FormField { id: string; name: string; type: string; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
 interface FormDefinition { id: string; title: string; fields: FormField[] }
 interface FileValue { fileName: string; storedName: string; downloadPath?: string }
-interface ProcedureDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentStageId: string; formData?: Record<string, unknown>; availableTransitions: TransitionOption[]; history: HistoryEntry[] }
+interface TramiteDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentStageId: string; formData?: Record<string, unknown>; availableTransitions: TransitionOption[]; history: HistoryEntry[] }
 
 const H_COLOR: Record<string, string> = {
-  CREATED: 'blue', REJECTED: 'rose', DECISION_REJECTED: 'amber',
-  LOOP_REJECTED: 'amber', LOOP_APPROVED: 'sky', LOOP_EVALUATED: 'sky'
+  CREADO: 'blue', RECHAZADO: 'rose', DECISION_RECHAZADA: 'orange',
+  LOOP_RECHAZADO: 'orange', LOOP_APROBADO: 'sky', LOOP_EVALUADO: 'sky'
 };
 const H_LABELS: Record<string, string> = {
-  CREATED: 'CREADO', JOIN_ADVANCED: 'UNION COMPLETADA', DECISION_REJECTED: 'RECHAZADO',
-  LOOP_REJECTED: 'RECHAZADO', LOOP_APPROVED: 'ITERACION APROBADA', REJECTED: 'RECHAZADO'
+  AVANZADO: 'Avanzado',
+  CREADO: 'Creado', UNION_COMPLETADA: 'Union completada', DECISION_RECHAZADA: 'Rechazado',
+  LOOP_RECHAZADO: 'Rechazado', LOOP_APROBADO: 'Iteracion aprobada', RECHAZADO: 'Rechazado',
+  BIFURCACION: 'Bifurcacion'
 };
 const H_ICONS: Record<string, string> = {
-  CREATED: 'add_circle', REJECTED: 'cancel', DECISION_REJECTED: 'undo',
-  JOIN_ADVANCED: 'merge_type', LOOP_REJECTED: 'repeat', LOOP_APPROVED: 'repeat'
+  CREADO: 'add_circle', RECHAZADO: 'cancel', DECISION_RECHAZADA: 'undo',
+  UNION_COMPLETADA: 'merge_type', LOOP_RECHAZADO: 'repeat', LOOP_APROBADO: 'repeat',
+  BIFURCACION: 'call_split'
 };
 
 @Component({
-  selector: 'app-procedure-detail',
+  selector: 'app-tramite-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatButtonModule, MatIconModule, MatCardModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatIconModule, MatCardModule, MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule],
   template: `
     <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-6 py-6">
       <div class="flex items-center gap-3">
-        <button mat-icon-button (click)="router.navigate(['/procedures'])"><mat-icon>arrow_back</mat-icon></button>
+        <button mat-icon-button (click)="router.navigate(['/tramites'])"><mat-icon>arrow_back</mat-icon></button>
         <div>
-          <h2 class="text-2xl font-bold text-slate-900">{{ procedure()?.title }}</h2>
-          <code class="rounded bg-slate-100 px-2 py-1 text-xs">{{ procedure()?.code }}</code>
+          <h2 class="text-2xl font-bold text-slate-900">{{ tramite()?.title }}</h2>
+          <code class="rounded bg-slate-100 px-2 py-1 text-xs">{{ tramite()?.code }}</code>
         </div>
-        <span class="ml-auto rounded-full px-3 py-1 text-xs font-semibold" [ngClass]="statusClass(procedure()?.status || '')">{{ procedure()?.status }}</span>
+        <span class="ml-auto rounded-full px-3 py-1 text-xs font-semibold" [ngClass]="statusClass(tramite()?.status || '')">{{ tramite()?.status }}</span>
       </div>
 
       @if (loading()) { <div class="flex justify-center py-16"><mat-spinner /></div> }
-      @else if (procedure()) {
+      @else if (tramite()) {
         <div class="grid gap-4 xl:grid-cols-2">
           <mat-card class="rounded-3xl p-5 shadow-sm">
             <h3 class="mb-3 text-base font-semibold text-slate-900">Informacion</h3>
-            <p class="mb-2 text-sm text-slate-600"><strong class="text-slate-900">Descripcion:</strong> {{ procedure()!.description || 'Sin Descripcion' }}</p>
-            <p class="text-sm text-slate-600"><strong class="text-slate-900">Estado:</strong> <span class="ml-1 rounded-full px-3 py-1 text-xs font-semibold" [ngClass]="statusClass(procedure()!.status)">{{ procedure()!.status }}</span></p>
+            <p class="mb-2 text-sm text-slate-600"><strong class="text-slate-900">Descripcion:</strong> {{ tramite()!.description || 'Sin Descripcion' }}</p>
+            <p class="text-sm text-slate-600"><strong class="text-slate-900">Estado:</strong> <span class="ml-1 rounded-full px-3 py-1 text-xs font-semibold" [ngClass]="statusClass(tramite()!.status)">{{ tramite()!.status }}</span></p>
           </mat-card>
 
-          @if (availableTransitions().length && procedure()!.status !== 'COMPLETED' && procedure()!.status !== 'REJECTED') {
+          @if (availableTransitions().length && tramite()!.status !== 'COMPLETADO' && tramite()!.status !== 'RECHAZADO') {
             <mat-card class="rounded-3xl p-5 shadow-sm">
               <h3 class="mb-3 text-base font-semibold text-slate-900">Avanzar Tramite</h3>
               @if (currentFormFields().length) {
@@ -75,12 +77,9 @@ const H_ICONS: Record<string, string> = {
                     <mat-form-field appearance="outline" class="w-full">
                       <mat-label>{{ field.name }}</mat-label>
                       @switch (field.type) {
-                        @case ('TEXTAREA') { <textarea matInput rows="3" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"></textarea> }
-                        @case ('SELECT') { <mat-select [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)">@for (o of field.options||[]; track o){<mat-option [value]="o">{{o}}</mat-option>}</mat-select> }
                         @case ('DATE') { <input matInput type="date" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
                         @case ('NUMBER') { <input matInput type="number" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
-                        @case ('CHECKBOX') { <mat-select [ngModel]="fieldValue(field)?'Si':'No'" (ngModelChange)="setFieldValue(field,$event==='Si')"><mat-option value="Si">Sí</mat-option><mat-option value="No">No</mat-option></mat-select> }
-                        @case ('RADIO') { <mat-select [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)">@for(o of field.options||[];track o){<mat-option [value]="o">{{o}}</mat-option>}</mat-select> }
+                        @case ('EMAIL') { <input matInput type="email" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
                         @default { <input matInput [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
                       }
                     </mat-form-field>
@@ -106,7 +105,7 @@ const H_ICONS: Record<string, string> = {
             <h3 class="mb-3 text-base font-semibold text-slate-900">Historial</h3>
             <div class="relative pl-5">
               <div class="absolute bottom-4 left-[15px] top-4 w-[2px] bg-slate-200"></div>
-              @for (h of procedure()!.history; track h.id) {
+              @for (h of tramite()!.history; track h.id) {
                 <div class="relative flex gap-3 py-3">
                   <div class="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full" [ngClass]="hDotClass(h)">
                     <mat-icon class="!h-[18px] !w-[18px] !text-[18px]">{{ H_ICONS[h.action] || 'arrow_forward' }}</mat-icon>
@@ -125,7 +124,7 @@ const H_ICONS: Record<string, string> = {
                   </div>
                 </div>
               }
-              @if (procedure()!.status === 'COMPLETED') {
+              @if (tramite()!.status === 'COMPLETADO') {
                 <div class="relative flex gap-3 py-3">
                   <div class="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-700"><mat-icon class="!h-[18px] !w-[18px] !text-[18px]">flag</mat-icon></div>
                   <div class="flex-1 pt-0.5"><span class="text-sm font-semibold text-blue-700">FIN</span><p class="text-xs text-slate-500">Trámite completado</p></div>
@@ -138,7 +137,7 @@ const H_ICONS: Record<string, string> = {
     </div>
   `
 })
-export class ProcedureDetailComponent implements OnInit {
+export class TramiteDetailComponent implements OnInit {
   @Input() id!: string;
   protected readonly H_ICONS = H_ICONS;
   protected readonly H_LABELS = H_LABELS;
@@ -147,7 +146,7 @@ export class ProcedureDetailComponent implements OnInit {
   private snack = inject(MatSnackBar);
   readonly router = inject(Router);
 
-  procedure = signal<ProcedureDetail | null>(null);
+  tramite = signal<TramiteDetail | null>(null);
   currentForm = signal<FormDefinition | null>(null);
   formValues = signal<Record<string, unknown>>({});
   loading = signal(true);
@@ -155,7 +154,7 @@ export class ProcedureDetailComponent implements OnInit {
 
   currentFormFields = computed(() => [...(this.currentForm()?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
   currentFormTitle = computed(() => this.currentForm()?.title || 'Formulario de la etapa');
-  availableTransitions = computed(() => this.procedure()?.availableTransitions ?? []);
+  availableTransitions = computed(() => this.tramite()?.availableTransitions ?? []);
   decisionButtons = computed(() => {
     const t = this.availableTransitions();
     return t.length && t.every(x => x.kind === 'decision-branch') ? this.dedupe(t) : [];
@@ -165,16 +164,17 @@ export class ProcedureDetailComponent implements OnInit {
   ngOnInit() { this.load(); }
 
   load() {
-    this.api.get<ProcedureDetail>(`/procedures/${this.id}`).subscribe({
-      next: p => { this.procedure.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); 
+    this.api.get<TramiteDetail>(`/tramites/${this.id}`).subscribe({
+      next: p => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>);
       this.loading.set(false); this.loadForm(p.currentStageId); },
       error: () => this.loading.set(false)
     });
   }
 
   statusClass(status: string) {
-    return ({ PENDING: 'bg-amber-100 text-amber-800', IN_PROGRESS: 'bg-blue-100 text-blue-800', 
-      COMPLETED: 'bg-emerald-100 text-emerald-800', REJECTED: 'bg-rose-100 text-rose-800' 
+    return ({ PENDIENTE: 'bg-amber-100 text-amber-800', EN_PROGRESO: 'bg-blue-100 text-blue-800',
+      COMPLETADO: 'bg-emerald-100 text-emerald-800', RECHAZADO: 'bg-rose-100 text-rose-800',
+      APROBADO: 'bg-emerald-100 text-emerald-800', OBSERVADO: 'bg-yellow-100 text-yellow-800'
     } as Record<string, string>)[status] ?? 'bg-slate-100 text-slate-700';
   }
 
@@ -205,8 +205,8 @@ export class ProcedureDetailComponent implements OnInit {
   advance(transitionId?: string) {
     const id = transitionId ?? this.primaryTransitionId();
     if (!id) return;
-    this.api.post(`/procedures/${this.id}/advance`, { transitionId: id, comment: this.comment, formData: this.formValues() }).subscribe({
-      next: (p: any) => { this.procedure.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); this.comment = ''; this.loadForm(p.currentStageId); this.snack.open('Tramite avanzado', '', { duration: 2000 }); },
+    this.api.post(`/tramites/${this.id}/advance`, { transitionId: id, comment: this.comment, formData: this.formValues() }).subscribe({
+      next: (p: any) => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); this.comment = ''; this.loadForm(p.currentStageId); this.snack.open('Tramite avanzado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
     });
   }
@@ -214,8 +214,8 @@ export class ProcedureDetailComponent implements OnInit {
   reject() {
     const reason = prompt('Motivo del rechazo:');
     if (reason === null) return;
-    this.api.post(`/procedures/${this.id}/reject`, { reason }).subscribe({
-      next: (p: any) => { this.procedure.update(prev => prev ? { ...prev, status: p.status } : prev); this.snack.open('Rechazado', '', { duration: 2000 }); },
+    this.api.post(`/tramites/${this.id}/reject`, { reason }).subscribe({
+      next: (p: any) => { this.tramite.update(prev => prev ? { ...prev, status: p.status } : prev); this.snack.open('Rechazado', '', { duration: 2000 }); },
       error: () => this.snack.open('Error al rechazar', '', { duration: 3000 })
     });
   }

@@ -37,16 +37,16 @@ export const routes: Routes = [
         loadComponent: () => import('./features/workflows/workflow-editor.component').then(m => m.WorkflowEditorComponent)
       },
       {
-        path: 'procedures',
-        loadComponent: () => import('./features/procedures/procedure-list.component').then(m => m.ProcedureListComponent)
+        path: 'tramites',
+        loadComponent: () => import('./features/tramites/tramite-list.component').then(m => m.TramiteListComponent)
       },
       {
         path: 'activities',
         loadComponent: () => import('./features/activities/activities.component').then(m => m.ActivitiesComponent)
       },
       {
-        path: 'procedures/:id',
-        loadComponent: () => import('./features/procedures/procedure-detail.component').then(m => m.ProcedureDetailComponent)
+        path: 'tramites/:id',
+        loadComponent: () => import('./features/tramites/tramite-detail.component').then(m => m.TramiteDetailComponent)
       },
       {
         path: 'users',

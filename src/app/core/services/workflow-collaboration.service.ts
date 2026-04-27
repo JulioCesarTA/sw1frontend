@@ -23,7 +23,7 @@ export interface CollaborativeWorkflowStage {
   responsibleDepartmentId?: string;
   responsibleDepartmentName?: string;
   requiresForm: boolean;
-  slaHours: number;
+  avgHours: number;
   nodeType?: string;
   isConditional?: boolean;
   condition?: string;

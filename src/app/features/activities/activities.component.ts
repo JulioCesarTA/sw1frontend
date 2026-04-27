@@ -1,4 +1,4 @@
-import { CommonModule } from "@angular/common";
+﻿import { CommonModule } from "@angular/common";
 import { Component, computed, inject, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { MatButtonModule } from "@angular/material/button";
@@ -164,15 +164,7 @@ export class ActivitiesComponent implements OnInit {
 
   formFields = computed(() => [...(this.formularioActual()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0)));
   formTitle = computed(() => this.formularioActual()?.title || this.selectedActivity()?.formDefinition?.title || "Formulario");
-  visibleTransitions = computed(() => {
-    const seen = new Set<string>();
-    return (this.selectedActivity()?.availableTransitions ?? []).filter((transition) => {
-      const key = (transition.label || transition.name || "Continuar").trim().toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  });
+  visibleTransitions = computed(() => this.selectedActivity()?.availableTransitions ?? []);
 
   ngOnInit() { this.loadActivities(); }
 
@@ -229,7 +221,7 @@ export class ActivitiesComponent implements OnInit {
     const activityId = this.selectedActivity()?.id;
     if (!activityId) return;
     this.isSubmitting.set(true);
-    this.api.post(`/procedures/${activityId}/advance`, { transitionId, formData: this.fieldValues() }).subscribe({
+    this.api.post(`/tramites/${activityId}/advance`, { transitionId, formData: this.fieldValues() }).subscribe({
       next: () => {
         this.isSubmitting.set(false);
         this.formularioActual.set(null);
@@ -267,3 +259,4 @@ export class ActivitiesComponent implements OnInit {
     window.open(`${environment.apiUrl}${path}${separator}filename=${encodeURIComponent(this.uploadedFileName(value))}`, "_blank");
   }
 }
+

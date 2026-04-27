@@ -37,7 +37,7 @@ import { AuthService } from '../core/services/auth.service';
               <mat-icon matListItemIcon>account_tree</mat-icon>
               <span matListItemTitle>Workflows</span>
             </a>
-            <a mat-list-item routerLink="/procedures" routerLinkActive="bg-indigo-500/20 text-white"
+            <a mat-list-item routerLink="/tramites" routerLinkActive="bg-indigo-500/20 text-white"
               class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
               <mat-icon matListItemIcon>description</mat-icon>
               <span matListItemTitle>Tramites</span>
@@ -83,7 +83,7 @@ import { AuthService } from '../core/services/auth.service';
               <mat-icon class="text-white/50">person</mat-icon>
               <div>
                 <p class="text-sm font-semibold text-black">{{ auth.user()?.name || auth.user()?.email }}</p>
-                <p class="text-xs text-black/50">{{ auth.user()?.jobTitle || auth.user()?.role }}</p>
+                <p class="text-xs text-black/50">{{ auth.user()?.jobRoleName || auth.user()?.role }}</p>
               </div>
             </div>
             <button mat-icon-button (click)="auth.logout()" title="Cerrar sesión" class="text-white/50">

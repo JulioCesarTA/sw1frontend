@@ -15,7 +15,7 @@ import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { environment } from '../../../environments/environment';
 
-interface Procedure { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
+interface Tramite { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
 interface Workflow { id: string; name: string }
 interface WorkflowTransition { id: string; fromStageId: string; toStageId: string; name?: string }
 interface FormField { id: string; name: string; type: string; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
@@ -25,7 +25,7 @@ interface WorkflowStage { id: string; name: string; order: number; nodeType: str
 interface WorkflowDetail extends Workflow { stages: WorkflowStage[]; transitions: WorkflowTransition[] }
 
 @Component({
-  selector: 'app-procedure-list',
+  selector: 'app-tramite-list',
   standalone: true,
   imports: [CommonModule, RouterLink, FormsModule, MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule],
   template: `
@@ -52,7 +52,7 @@ interface WorkflowDetail extends Workflow { stages: WorkflowStage[]; transitions
                 <tr><th class="px-4 py-3">Codigo</th><th class="px-4 py-3">Titulo</th><th class="px-4 py-3">Estado</th><th class="px-4 py-3">Workflow</th><th class="px-4 py-3">Fecha</th><th class="px-4 py-3"></th></tr>
               </thead>
               <tbody>
-                @for (p of filteredProcedures(); track p.id) {
+                @for (p of filteredTramites(); track p.id) {
                   <tr class="border-t border-slate-100 hover:bg-slate-50">
                     <td class="px-4 py-3"><code class="rounded bg-slate-100 px-2 py-1 text-xs">{{ p.code }}</code></td>
                     <td class="px-4 py-3">{{ p.title }}</td>
@@ -120,12 +120,12 @@ interface WorkflowDetail extends Workflow { stages: WorkflowStage[]; transitions
     </div>
   `
 })
-export class ProcedureListComponent implements OnInit {
+export class TramiteListComponent implements OnInit {
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
   private auth = inject(AuthService);
 
-  procedures = signal<Procedure[]>([]);
+  tramites = signal<Tramite[]>([]);
   workflows = signal<Workflow[]>([]);
   loading = signal(true);
   showForm = signal(false);
@@ -140,18 +140,18 @@ export class ProcedureListComponent implements OnInit {
   codeFilter = signal('');
 
   entryFormFields = computed(() => [...(this.entryStage()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-  filteredProcedures = computed(() => {
+  filteredTramites = computed(() => {
     const f = this.codeFilter().trim().toLowerCase();
-    return f ? this.procedures().filter(p => p.code.toLowerCase().includes(f)) : this.procedures();
+    return f ? this.tramites().filter(p => p.code.toLowerCase().includes(f)) : this.tramites();
   });
 
   ngOnInit() {
-    this.api.get<Procedure[]>('/procedures').subscribe({ next: p => { this.procedures.set(p); this.loading.set(false); }, error: () => this.loading.set(false) });
+    this.api.get<Tramite[]>('/tramites').subscribe({ next: p => { this.tramites.set(p); this.loading.set(false); }, error: () => this.loading.set(false) });
     this.api.get<Workflow[]>('/workflows').subscribe({ next: w => this.workflows.set(w) });
   }
 
   statusClass(s: string) {
-    return ({ PENDING: 'bg-amber-100 text-amber-800', IN_PROGRESS: 'bg-blue-100 text-blue-800', COMPLETED: 'bg-emerald-100 text-emerald-800', REJECTED: 'bg-rose-100 text-rose-800' } as Record<string, string>)[s] ?? 'bg-slate-100 text-slate-700';
+    return ({ PENDIENTE: 'bg-amber-100 text-amber-800', EN_PROGRESO: 'bg-blue-100 text-blue-800', COMPLETADO: 'bg-emerald-100 text-emerald-800', RECHAZADO: 'bg-rose-100 text-rose-800', APROBADO: 'bg-emerald-100 text-emerald-800', OBSERVADO: 'bg-yellow-100 text-yellow-800' } as Record<string, string>)[s] ?? 'bg-slate-100 text-slate-700';
   }
 
   wfName(id: string) { return this.workflows().find(w => w.id === id)?.name || id; }
@@ -174,12 +174,13 @@ export class ProcedureListComponent implements OnInit {
       next: wf => {
         this.selectedWorkflow.set(wf);
         const stages = [...wf.stages].sort((a, b) => a.order - b.order);
-        const first = stages[0];
-        if (!first) return;
-        const startTx = first.nodeType.toLowerCase() === 'start' ? (wf.transitions.find(t => t.fromStageId === first.id) ?? null) : null;
-        const user = this.auth.user();
-        const entry = stages.filter(s => s.nodeType.toLowerCase() !== 'start').find(s => !!user?.departmentId && s.responsibleDepartmentId === user.departmentId)
-          ?? (startTx ? stages.find(s => s.id === startTx.toStageId) ?? first : first);
+        const startStage = stages.find(stage => stage.nodeType.toLowerCase() === 'start') ?? null;
+        const firstWorkStage = stages.find(stage => stage.nodeType.toLowerCase() !== 'start') ?? null;
+        const startTx = startStage ? (wf.transitions.find(t => t.fromStageId === startStage.id) ?? null) : null;
+        const entry = startTx
+          ? stages.find(stage => stage.id === startTx.toStageId) ?? firstWorkStage ?? startStage
+          : firstWorkStage ?? startStage;
+        if (!entry) return;
         this.autoStartTransition.set(startTx);
         this.submitTransition.set(wf.transitions.find(t => t.fromStageId === entry.id) ?? null);
         if (entry.formDefinition?.fields?.length) { this.entryStage.set(entry); return; }
@@ -215,12 +216,12 @@ export class ProcedureListComponent implements OnInit {
     const payload = {
       title: wf && entry ? `${wf.name} - ${entry.name}` : `Tramite ${new Date().toLocaleString()}`,
       description: '', workflowId: this.formWorkflowId, formData: this.formValues(),
-      comment: `Enviado por ${this.auth.user()?.jobTitle || 'usuario'}`,
+      comment: `Enviado por ${this.auth.user()?.name || 'usuario'}`,
       autoTransitionIds: [this.autoStartTransition()?.id, this.submitTransition()?.id].filter((id): id is string => !!id)
     };
     this.submitting.set(true);
-    this.api.post<any>('/procedures/submit', payload).pipe(finalize(() => this.submitting.set(false))).subscribe({
-      next: (p: any) => { this.procedures.update(list => [p, ...list.filter(i => i.id !== p.id)]); this.showForm.set(false); this.snack.open('Tramite enviado', '', { duration: 2500 }); },
+    this.api.post<any>('/tramites/submit', payload).pipe(finalize(() => this.submitting.set(false))).subscribe({
+      next: (p: any) => { this.tramites.update(list => [p, ...list.filter(i => i.id !== p.id)]); this.showForm.set(false); this.snack.open('Tramite enviado', '', { duration: 2500 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error al enviar', '', { duration: 3500 })
     });
   }

@@ -6,7 +6,7 @@ import { ReportsRealtimeService } from '../../core/services/reports-realtime.ser
 
 interface RolePerformance { departmentName: string; jobRoleName: string; finishedEarly: number; finishedLate: number; averageDurationHours: number; averageSlaHours: number; }
 interface DepartmentFlow { departmentName: string; total: number; }
-interface DashboardStats { totalProcedures: number; byStatus: Record<string, number>; rolePerformance: RolePerformance[]; departmentFlow: DepartmentFlow[]; }
+interface DashboardStats { totalTramites: number; byStatus: Record<string, number>; rolePerformance: RolePerformance[]; departmentFlow: DepartmentFlow[]; }
 
 @Component({
   selector: 'app-reports',
@@ -29,7 +29,7 @@ interface DashboardStats { totalProcedures: number; byStatus: Record<string, num
       } @else {
         <div class="mb-6">
           <div class="rounded-2xl border border-slate-200 bg-white p-5"><div class="text-sm text-slate-500">Total tramites</div>
-          <div class="mt-2 text-4xl font-bold text-slate-900">{{ stats()?.totalProcedures ?? 0 }}</div></div>
+          <div class="mt-2 text-4xl font-bold text-slate-900">{{ stats()?.totalTramites ?? 0 }}</div></div>
         </div>
 
         <div class="grid gap-6 xl:grid-cols-2">

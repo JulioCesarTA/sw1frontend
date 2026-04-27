@@ -11,7 +11,8 @@ export interface AuthUser {
   role: string;
   companyId?: string;
   departmentId?: string;
-  jobTitle?: string;
+  jobRoleId?: string;
+  jobRoleName?: string;
 }
 
 @Injectable({ providedIn: 'root' })

@@ -1,0 +1,53 @@
+@startuml
+skinparam sequenceArrowThickness 2
+skinparam roundcorner 5
+skinparam sequenceParticipant underline
+
+actor "Usuario / Admin" as User
+
+participant "DepartmentListComponent\n(Angular)" as UI
+participant "DepartmentController\nGET /departments/{id}" as Controller
+participant "DepartmentService" as Service
+participant "DepartmentRepository" as Repo
+database "MongoDB\n(departments)" as DB
+
+== Consultar Departamento ==
+
+User -> UI : Click en una fila
+activate UI
+
+UI -> UI : api.get('/departments/{id}')
+
+UI -> Controller : GET /departments/{id} + JWT
+activate Controller
+
+Controller -> Service : findOne(id)
+activate Service
+
+Service -> Repo : findById(id)
+activate Repo
+Repo -> DB : SELECT * FROM departments\nWHERE id=?
+activate DB
+DB --> Repo : Optional<Department>
+deactivate DB
+
+alt Departamento no encontrado
+    Repo --> Service : Optional.empty()
+    deactivate Repo
+    Service --> Controller : 404 Not Found\n"Departamento no encontrado"
+    Controller --> UI : 404 Not Found
+    deactivate Controller
+    UI --> User : snack.open('Error', ...)
+else Departamento existe
+    Repo --> Service : Optional[Department]
+    deactivate Repo
+    Service --> Controller : Department
+    deactivate Service
+    Controller --> UI : 200 OK – Department
+    deactivate Controller
+    UI --> User : Muestra detalle del departamento
+end
+
+deactivate UI
+
+@enduml

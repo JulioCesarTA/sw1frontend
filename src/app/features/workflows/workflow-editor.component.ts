@@ -14,6 +14,8 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { WorkflowAiPanelComponent } from './workflow-ai-panel.component';
+import { NodeBehaviorResolver } from './utils/node-behavior-resolver';
+import { autoLayoutWorkflowNodos } from './utils/workflow-layout.utils';
 import {
   CollaborativeWorkflowNodo,
   CollaborativeWorkflowTransition,
@@ -61,7 +63,7 @@ interface Nodo {
   responsibleDepartmentName?: string;
   responsibleJobRoleId?: string;
   requiresForm: boolean;
-  avgHours: number;
+  avgMinutes: number;
   condition?: string;
   trueLabel?: string;
   falseLabel?: string;
@@ -113,7 +115,7 @@ interface NodoForm {
   nodeType: NodeType;
   responsibleDepartmentId: string;
   responsibleJobRoleId: string;
-  avgHours: number;
+  avgMinutes: number;
   trueLabel: string;
   falseLabel: string;
   condition: string;
@@ -161,7 +163,7 @@ interface DiagramAiAction {
   } | null;
   trueLabel?: string;
   falseLabel?: string;
-  avgHours?: number;
+  avgMinutes?: number;
   posX?: number;
   posY?: number;
   forwardConfig?: ForwardConfig;
@@ -381,7 +383,7 @@ interface DiagramAiAction {
                               @if (nodo.responsibleDepartmentName) {
                                 <div class="mt-3 text-sm font-medium text-slate-700">{{ nodo.responsibleDepartmentName }}</div>
                               }
-                              <div class="mt-3 text-xs text-slate-500">Promedio {{ nodo.avgHours }}h</div>
+                              <div class="mt-3 text-xs text-slate-500">Promedio {{ nodo.avgMinutes }} min</div>
                             </div>
                           }
                         }
@@ -476,8 +478,8 @@ interface DiagramAiAction {
                   </mat-form-field>
 
                   <mat-form-field appearance="outline" class="w-full">
-                    <mat-label>Promedio en horas</mat-label>
-                    <input matInput type="number" min="1" [(ngModel)]="nodoForm.avgHours">
+                    <mat-label>Promedio en minutos</mat-label>
+                    <input matInput type="number" min="1" [(ngModel)]="nodoForm.avgMinutes">
                   </mat-form-field>
 
                   @if (nodoForm.requiresForm) {
@@ -636,6 +638,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
   private collab = inject(WorkflowCollaborationService);
+  private nodeBehaviorResolver = new NodeBehaviorResolver();
 
   readonly fieldTypes: FieldType[] = ['TEXT', 'NUMBER', 'DATE', 'FILE', 'EMAIL'];
   readonly palette = [
@@ -892,7 +895,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       nodeType: this.nodoForm.nodeType,
       responsibleDepartmentId: nodoProceso ? this.nodoForm.responsibleDepartmentId || null : null,
       responsibleJobRoleId: nodoProceso ? this.nodoForm.responsibleJobRoleId || null : null,
-      avgHours: nodoProceso ? Number(this.nodoForm.avgHours || 1) : 0,
+      avgMinutes: nodoProceso ? Number(this.nodoForm.avgMinutes || 1) : 0,
       condition: this.nodoForm.condition,
       trueLabel: this.nodoForm.trueLabel,
       falseLabel: this.nodoForm.falseLabel,
@@ -965,7 +968,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   }
 
   esNodoHumano(type: string | undefined) {
-    return (type || 'proceso') === 'proceso';
+    return this.nodeBehaviorResolver.resolve(type).isHuman;
   }
 
   rolesForDepartment(departmentId: string) {
@@ -977,8 +980,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   }
 
   tipoNodo(nodo: Pick<Nodo, 'nodeType'>) {
-    const raw = (nodo.nodeType || 'proceso').toLowerCase();
-    return raw as NodeType;
+    return this.nodeBehaviorResolver.resolveType(nodo) as NodeType;
   }
 
   nodeCardClass(nodo: Nodo) {
@@ -1029,6 +1031,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
 
   private async applyAiActions(actions: DiagramAiAction[]) {
     const placeholderMap = new Map<string, string>();
+    let shouldRelayout = false;
     for (const action of actions) {
       switch (action.type) {
         case 'create_department':
@@ -1039,22 +1042,30 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
           break;
         case 'create_nodo':
           await this.applyCreateNodoAction(action, placeholderMap);
+          shouldRelayout = true;
           break;
         case 'update_nodo':
           await this.applyUpdateNodoAction(action, placeholderMap);
+          shouldRelayout = true;
           break;
         case 'delete_nodo':
           await this.applyDeleteNodoAction(action, placeholderMap);
+          shouldRelayout = true;
           break;
         case 'connect_nodo':
           await this.applyConnectNodoAction(action, placeholderMap);
+          shouldRelayout = true;
           break;
         case 'disconnect_nodo':
           await this.applyDisconnectNodoAction(action);
+          shouldRelayout = true;
           break;
         default:
           break;
       }
+    }
+    if (shouldRelayout) {
+      await this.autoLayoutWorkflow();
     }
   }
 
@@ -1098,7 +1109,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       responsibleJobRoleId: this.jobRoleIdByName(action.responsibleDepartmentName, action.responsibleJobRoleName),
       requiresForm: Boolean(action.requiresForm),
       formDefinition: this.normalizeAiFormDefinition(action.formDefinition),
-      avgHours: Number(action.avgHours ?? (action.nodeType === 'proceso' ? 1 : 0)),
+      avgMinutes: Number(action.avgMinutes ?? (action.nodeType === 'proceso' ? 60 : 0)),
       trueLabel: action.trueLabel || 'Si',
       falseLabel: action.falseLabel || 'No',
       posX: Number(action.posX ?? 120),
@@ -1130,7 +1141,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       formDefinition: this.hasActionField(action, 'formDefinition')
         ? this.normalizeAiFormDefinition(action.formDefinition)
         : (current?.formDefinition ?? null),
-      avgHours: Number(action.avgHours ?? current?.avgHours ?? 1),
+      avgMinutes: Number(action.avgMinutes ?? current?.avgMinutes ?? 60),
       trueLabel: action.trueLabel ?? current?.trueLabel ?? 'Si',
       falseLabel: action.falseLabel ?? current?.falseLabel ?? 'No',
       posX: Number(action.posX ?? current?.posX ?? 0),
@@ -1249,7 +1260,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       responsibleDepartmentId: this.esNodoHumano(type) ? this.departments()[0]?.id ?? null : null,
       responsibleJobRoleId: null,
       requiresForm: false,
-      avgHours: this.esNodoHumano(type) ? 24 : 0,
+      avgMinutes: this.esNodoHumano(type) ? 60 : 0,
       isConditional: type === 'decision' || type === 'iteracion',
       trueLabel: 'Si',
       falseLabel: 'No',
@@ -1306,6 +1317,8 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     if (workflow.transitions.some(transition => transition.fromNodoId === fromNodoId && transition.toNodoId === toNodoId)) return 'Esa conexion ya existe';
     if (toType === 'inicio') return 'Inicio no recibe conexiones';
     if (fromType === 'fin') return 'Fin no puede salir a otro nodo';
+    if (fromType === 'inicio' && toType !== 'proceso') return 'Inicio solo puede conectarse a un Proceso';
+    if (toType === 'fin' && fromType !== 'proceso') return 'Fin solo puede recibir conexion desde un Proceso';
     if (fromType === 'inicio' && outgoing.length >= 1) return 'Inicio solo puede tener una salida';
     if ((toType === 'decision' || toType === 'iteracion') && incomingToTarget.length >= 1) {
       return `${to.name} solo puede tener una entrada`;
@@ -1387,7 +1400,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       nodeType: this.tipoNodo(nodo),
       responsibleDepartmentId: nodo.responsibleDepartmentId || '',
       responsibleJobRoleId: nodo.responsibleJobRoleId || '',
-      avgHours: nodo.avgHours ?? 1,
+      avgMinutes: nodo.avgMinutes ?? 60,
       trueLabel: nodo.trueLabel || 'Si',
       falseLabel: nodo.falseLabel || 'No',
       condition: nodo.condition || '',
@@ -1466,7 +1479,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       ...typed,
       responsibleDepartmentName: typed.responsibleDepartmentName || this.departments().find(item => item.id === typed.responsibleDepartmentId)?.name,
       requiresForm: typed.requiresForm ?? false,
-      avgHours: typed.avgHours ?? 24
+      avgMinutes: typed.avgMinutes ?? 1440
     };
   }
 
@@ -1563,7 +1576,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   }
 
   private esNodoLogico(nodeType: string | undefined) {
-    return ['decision', 'iteracion', 'bifurcasion', 'union'].includes((nodeType || '').toLowerCase());
+    return this.nodeBehaviorResolver.resolve(nodeType).isLogical;
   }
 
   private nodoCenter(nodoId: string) {
@@ -1571,65 +1584,36 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     if (!nodo) return null;
     const x = nodo.posX ?? 0;
     const y = nodo.posY ?? 0;
-    switch (this.tipoNodo(nodo)) {
-      case 'inicio':
-      case 'fin':
-        return { x: x + 41, y: y + 41 };
-      case 'decision':
-      case 'iteracion':
-        return { x: x + 52, y: y + 52 };
-      case 'bifurcasion':
-      case 'union':
-        return { x: x + 75, y: y + 8 };
-      default:
-        return { x: x + 105, y: y + 46 };
-    }
+    return this.nodeBehaviorResolver.resolve(nodo).resolveCenter(x, y);
   }
 
   private nodoBoxWidth(nodo: Pick<Nodo, 'nodeType'>) {
-    switch (this.tipoNodo(nodo)) {
-      case 'inicio':
-      case 'fin':
-        return 82;
-      case 'decision':
-      case 'iteracion':
-        return 104;
-      case 'bifurcasion':
-      case 'union':
-        return 150;
-      default:
-        return 210;
-    }
+    return this.nodeBehaviorResolver.resolve(nodo).width;
   }
 
   private nodoBoxHeight(nodo: Pick<Nodo, 'nodeType'>) {
-    switch (this.tipoNodo(nodo)) {
-      case 'inicio':
-      case 'fin':
-        return 82;
-      case 'decision':
-      case 'iteracion':
-        return 104;
-      case 'bifurcasion':
-      case 'union':
-        return 44;
-      default:
-        return 140;
-    }
+    return this.nodeBehaviorResolver.resolve(nodo).height;
   }
 
   private defaultTransitionName(source?: Nodo) {
     if (!source) return '';
-    const type = this.tipoNodo(source);
-    if (type === 'decision') {
-      const outgoing = this.workflow()?.transitions.filter(item => item.fromNodoId === source.id).length || 0;
-      return outgoing === 0 ? 'Aceptar' : 'Rechazar';
-    }
-    if (type === 'iteracion') {
-      const outgoing = this.workflow()?.transitions.filter(item => item.fromNodoId === source.id).length || 0;
-      return outgoing === 0 ? 'Aceptar' : 'Repetir';
-    }
-    return '';
+    const outgoing = this.workflow()?.transitions.filter(item => item.fromNodoId === source.id).length || 0;
+    return this.nodeBehaviorResolver.resolve(source).defaultTransitionName(outgoing);
+  }
+
+  private async autoLayoutWorkflow() {
+    const workflow = this.workflow();
+    if (!workflow?.nodo.length) return;
+    const nextNodos = autoLayoutWorkflowNodos(workflow, this.departments(), this.nodeBehaviorResolver);
+
+    this.workflow.set({ ...workflow, nodo: nextNodos });
+
+    await Promise.all(nextNodos.map(async nodo => {
+      await firstValueFrom(this.api.patch<Nodo>(`/workflow-nodos/${nodo.id}`, {
+        posX: nodo.posX,
+        posY: nodo.posY
+      }));
+    }));
   }
 
   private createFieldId() {
@@ -1643,7 +1627,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       nodeType: 'proceso',
       responsibleDepartmentId: '',
       responsibleJobRoleId: '',
-      avgHours: 24,
+      avgMinutes: 1440,
       trueLabel: 'Si',
       falseLabel: 'No',
       condition: '',

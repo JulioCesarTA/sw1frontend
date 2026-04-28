@@ -1,23 +1,13 @@
 import { Component, computed, inject, Input, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
-import { FormsModule } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/services/api.service';
-import { environment } from '../../../environments/environment';
 
 interface HistoryEntry { id: string; action: string; fromNodoId?: string; toNodoId?: string; comment?: string; changedAt: string; nodoName?: string; departmentName?: string; jobRoleName?: string; isCurrent?: boolean }
-interface TransitionOption { id: string; fromNodoId: string; toNodoId: string; name: string; label?: string; targetNodoName?: string; tipo?: string; resultadoRama?: string }
-interface FormField { id: string; name: string; type: string; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
-interface FormDefinition { id: string; title: string; fields: FormField[] }
-interface FileValue { fileName: string; storedName: string; downloadPath?: string }
-interface TramiteDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentNodoId: string; formData?: Record<string, unknown>; availableTransitions: TransitionOption[]; history: HistoryEntry[] }
+interface TramiteDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentNodoId: string; history: HistoryEntry[] }
 
 const H_COLOR: Record<string, string> = {
   CREADO: 'blue', RECHAZADO: 'rose', DECISION_RECHAZADA: 'orange',
@@ -38,7 +28,7 @@ const H_ICONS: Record<string, string> = {
 @Component({
   selector: 'app-tramite-detail',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatButtonModule, MatIconModule, MatCardModule, MatFormFieldModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule],
+  imports: [CommonModule, MatIconModule, MatCardModule, MatProgressSpinnerModule],
   template: `
     <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-6 py-6">
       <div class="flex items-center gap-3">
@@ -59,47 +49,11 @@ const H_ICONS: Record<string, string> = {
             <p class="text-sm text-slate-600"><strong class="text-slate-900">Estado:</strong> <span class="ml-1 rounded-full px-3 py-1 text-xs font-semibold" [ngClass]="statusClass(tramite()!.status)">{{ tramite()!.status }}</span></p>
           </mat-card>
 
-          @if (availableTransitions().length && tramite()!.status !== 'COMPLETADO' && tramite()!.status !== 'RECHAZADO') {
-            <mat-card class="rounded-3xl p-5 shadow-sm">
-              <h3 class="mb-3 text-base font-semibold text-slate-900">Avanzar Tramite</h3>
-              @if (currentFormFields().length) {
-                <h4 class="mb-3 text-sm font-semibold text-slate-900">{{ currentFormTitle() }}</h4>
-                @for (field of currentFormFields(); track field.id) {
-                  @if (field.type === 'FILE') {
-                    <div class="mb-4 flex flex-col gap-2">
-                      <label class="text-sm font-medium text-slate-700">{{ field.name }}</label>
-                      <input class="text-sm text-slate-700" type="file" (change)="onFileSelected(field, $event)">
-                      @if (fieldValue(field) && isFileValue(fieldValue(field))) {
-                        <button type="button" class="bg-transparent p-0 text-left text-xs text-indigo-600 underline" (click)="downloadFile(fieldValue(field))">{{ fileLabel(fieldValue(field)) }}</button>
-                      }
-                    </div>
-                  } @else {
-                    <mat-form-field appearance="outline" class="w-full">
-                      <mat-label>{{ field.name }}</mat-label>
-                      @switch (field.type) {
-                        @case ('DATE') { <input matInput type="date" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
-                        @case ('NUMBER') { <input matInput type="number" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
-                        @case ('EMAIL') { <input matInput type="email" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
-                        @default { <input matInput [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
-                      }
-                    </mat-form-field>
-                  }
-                }
-              }
-              @if (decisionButtons().length) {
-                <div class="mb-4 flex flex-wrap gap-2">
-                  @for (t of decisionButtons(); track t.id; let i = $index) {
-                    <button mat-flat-button [color]="isRejectTransition(t,i)?'warn':'primary'" (click)="advance(t.id)">{{ btnLabel(t,i) }}</button>
-                  }
-                </div>
-              }
-              <mat-form-field appearance="outline" class="w-full"><mat-label>Comentario</mat-label><input matInput [(ngModel)]="comment"></mat-form-field>
-              <div class="mt-2 flex flex-wrap gap-2">
-                @if (!decisionButtons().length) { <button mat-flat-button color="primary" (click)="advance()" [disabled]="!primaryTransitionId()"><mat-icon>arrow_forward</mat-icon> Enviar actividad</button> }
-                <button mat-stroked-button color="warn" (click)="reject()"><mat-icon>close</mat-icon> Rechazar</button>
-              </div>
-            </mat-card>
-          }
+          <mat-card class="rounded-3xl p-5 shadow-sm">
+            <h3 class="mb-3 text-base font-semibold text-slate-900">Seguimiento</h3>
+            <p class="mb-2 text-sm text-slate-600"><strong class="text-slate-900">Etapa actual:</strong> {{ currentNodoName() || 'Sin etapa activa' }}</p>
+            <p class="text-sm text-slate-600"><strong class="text-slate-900">Workflow:</strong> {{ tramite()!.workflowId }}</p>
+          </mat-card>
 
           <mat-card class="rounded-3xl p-5 shadow-sm xl:col-span-2">
             <h3 class="mb-3 text-base font-semibold text-slate-900">Historial</h3>
@@ -143,30 +97,17 @@ export class TramiteDetailComponent implements OnInit {
   protected readonly H_LABELS = H_LABELS;
 
   private api = inject(ApiService);
-  private snack = inject(MatSnackBar);
   readonly router = inject(Router);
 
   tramite = signal<TramiteDetail | null>(null);
-  currentForm = signal<FormDefinition | null>(null);
-  formValues = signal<Record<string, unknown>>({});
   loading = signal(true);
-  comment = '';
-
-  currentFormFields = computed(() => [...(this.currentForm()?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-  currentFormTitle = computed(() => this.currentForm()?.title || 'Formulario de la etapa');
-  availableTransitions = computed(() => this.tramite()?.availableTransitions ?? []);
-  decisionButtons = computed(() => {
-    const t = this.availableTransitions();
-    return t.length && t.every(x => x.tipo === 'rama-decision') ? this.dedupe(t) : [];
-  });
-  primaryTransitionId = computed(() => this.decisionButtons().length ? '' : (this.availableTransitions()[0]?.id ?? ''));
+  currentNodoName = computed(() => this.tramite()?.history.find(item => item.isCurrent)?.nodoName || '');
 
   ngOnInit() { this.load(); }
 
   load() {
     this.api.get<TramiteDetail>(`/tramites/${this.id}`).subscribe({
-      next: p => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>);
-      this.loading.set(false); this.loadForm(p.currentNodoId); },
+      next: p => { this.tramite.set(p); this.loading.set(false); },
       error: () => this.loading.set(false)
     });
   }
@@ -180,57 +121,4 @@ export class TramiteDetailComponent implements OnInit {
   private hColor(h: HistoryEntry) { return h.isCurrent ? 'amber' : (H_COLOR[h.action] ?? 'emerald'); }
   hDotClass(h: HistoryEntry) { const c = this.hColor(h); return `bg-${c}-100 text-${c}-700`; }
   hLabelClass(h: HistoryEntry) { return `text-${this.hColor(h)}-700`; }
-
-  isRequired(f: FormField) { return !!(f.required || f.isRequired); }
-  fieldValue(f: FormField) { return this.formValues()[f.name] ?? ''; }
-  setFieldValue(f: FormField, v: unknown) { this.formValues.update(vals => ({ ...vals, [f.name]: v })); }
-
-  isFileValue(v: unknown): v is FileValue { return !!v && typeof v === 'object' && 'storedName' in (v as object); }
-  fileLabel(v: unknown) { const f = v as FileValue; return f?.fileName || f?.storedName || ''; }
-  downloadFile(v: unknown) {
-    if (!this.isFileValue(v)) return;
-    const path = v.downloadPath || `/files/${v.storedName}/download`;
-    window.open(`${environment.apiUrl}${path}${path.includes('?') ? '&' : '?'}filename=${encodeURIComponent(this.fileLabel(v))}`, '_blank');
-  }
-
-  onFileSelected(field: FormField, event: Event) {
-    const file = (event.target as HTMLInputElement)?.files?.[0];
-    if (!file) return;
-    const body = new FormData();
-    body.append('file', file);
-    this.api.post<FileValue>('/files/upload', body).subscribe({ next: u => this.setFieldValue(field, u), error: () => this.snack.open('Error al subir archivo', '', { duration: 3000 }) });
-  }
-
-  advance(transitionId?: string) {
-    const id = transitionId ?? this.primaryTransitionId();
-    if (!id) return;
-    this.api.post(`/activities/${this.id}/advance`, { transitionId: id, comment: this.comment, formData: this.formValues() }).subscribe({
-      next: (p: any) => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); this.comment = ''; this.loadForm(p.currentNodoId); this.snack.open('Tramite avanzado', '', { duration: 2000 }); },
-      error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
-    });
-  }
-
-  reject() {
-    const reason = prompt('Motivo del rechazo:');
-    if (reason === null) return;
-    this.api.post(`/activities/${this.id}/reject`, { reason }).subscribe({
-      next: (p: any) => { this.tramite.update(prev => prev ? { ...prev, status: p.status } : prev); this.snack.open('Rechazado', '', { duration: 2000 }); },
-      error: () => this.snack.open('Error al rechazar', '', { duration: 3000 })
-    });
-  }
-
-  btnLabel(t: TransitionOption, i: number) { return (t.label || t.name || '').trim() || `Opcion ${i + 1}`; }
-  isRejectTransition(t: TransitionOption, i: number) {
-    const n = this.btnLabel(t, i).toLowerCase();
-    return t.resultadoRama === 'rechazo' || ['no', 'rechazar', 'rechazado', 'devolver'].includes(n);
-  }
-
-  private dedupe(transitions: TransitionOption[]) {
-    const seen = new Set<string>();
-    return transitions.filter((t, i) => { const k = this.btnLabel(t, i).toLowerCase(); return seen.has(k) ? false : !!seen.add(k); });
-  }
-
-  private loadForm(nodoId: string) {
-    this.api.get<FormDefinition>(`/forms/nodo/${nodoId}`).subscribe({ next: f => this.currentForm.set(f), error: () => this.currentForm.set(null) });
-  }
 }

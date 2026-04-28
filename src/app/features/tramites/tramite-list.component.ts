@@ -13,7 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
-import { environment } from '../../../environments/environment';
+import { isStoredFileValue, openStoredFileDownload, storedFileLabel } from '../../core/utils/file-value.utils';
 
 interface Tramite { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
 interface Workflow { id: string; name: string }
@@ -182,7 +182,7 @@ export class TramiteListComponent implements OnInit {
           : primerNodoTrabajo ?? nodoInicio;
         if (!entry) return;
         this.autoStartTransition.set(transicionInicio);
-        this.submitTransition.set(wf.transitions.find(t => t.fromNodoId === entry.id) ?? null);
+        this.submitTransition.set(this.resolveSubmitTransition(wf, entry));
         if (entry.formDefinition?.fields?.length) { this.entryNodo.set(entry); return; }
         this.api.get<FormDefinition>(`/forms/nodo/${entry.id}`).subscribe({ next: f => this.entryNodo.set({ ...entry, formDefinition: f }), error: () => this.entryNodo.set(entry) });
       },
@@ -190,16 +190,25 @@ export class TramiteListComponent implements OnInit {
     });
   }
 
+  private resolveSubmitTransition(workflow: WorkflowDetail, entry: WorkflowNodo) {
+    const transition = workflow.transitions.find(t => t.fromNodoId === entry.id) ?? null;
+    if (!transition) return null;
+    const targetNodo = workflow.nodo.find(nodo => nodo.id === transition.toNodoId);
+    const targetType = String(targetNodo?.nodeType || '').toLowerCase();
+    if (targetType === 'decision' || targetType === 'iteracion') {
+      return null;
+    }
+    return transition;
+  }
+
   isRequired(f: FormField) { return !!(f.required || f.isRequired); }
   fieldValue(f: FormField) { return this.formValues()[f.name] ?? ''; }
   setFieldValue(f: FormField, v: unknown) { this.formValues.update(vals => ({ ...vals, [f.name]: v })); }
 
-  isFileValue(v: unknown): v is FileValue { return !!v && typeof v === 'object' && 'storedName' in (v as object); }
-  fileLabel(v: unknown) { const f = v as FileValue; return f?.fileName || f?.storedName || ''; }
+  isFileValue(v: unknown): v is FileValue { return isStoredFileValue(v); }
+  fileLabel(v: unknown) { return storedFileLabel(v); }
   downloadFile(v: unknown) {
-    if (!this.isFileValue(v)) return;
-    const path = v.downloadPath || `/files/${v.storedName}/download`;
-    window.open(`${environment.apiUrl}${path}${path.includes('?') ? '&' : '?'}filename=${encodeURIComponent(this.fileLabel(v))}`, '_blank');
+    openStoredFileDownload(v);
   }
 
   onFileSelected(field: FormField, event: Event) {

@@ -4,7 +4,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ApiService } from '../../core/services/api.service';
 import { ReportsRealtimeService } from '../../core/services/reports-realtime.service';
 
-interface RolePerformance { departmentName: string; jobRoleName: string; finishedEarly: number; finishedLate: number; averageDurationHours: number; averageSlaHours: number; }
+interface RolePerformance { departmentName: string; jobRoleName: string; finishedEarly: number; finishedLate: number; averageDurationMinutes: number; averageAvgMinutes: number; }
 interface DepartmentFlow { departmentName: string; total: number; }
 interface DashboardStats { totalTramites: number; byStatus: Record<string, number>; rolePerformance: RolePerformance[]; departmentFlow: DepartmentFlow[]; }
 
@@ -67,13 +67,13 @@ interface DashboardStats { totalTramites: number; byStatus: Record<string, numbe
               <table class="w-full text-sm">
                 <thead class="border-b border-slate-200 text-left text-slate-500">
                   <tr><th class="py-2">Departamento</th><th class="py-2">Rol</th><th class="py-2">Cantidad</th>
-                  <th class="py-2">Promedio</th><th class="py-2">Tiempo</th></tr>
+                  <th class="py-2">Promedio (min)</th><th class="py-2">Estimado (min)</th></tr>
                 </thead>
                 <tbody>
                   @for (item of tempranoRoles(); track item.departmentName + item.jobRoleName) {
                     <tr class="border-b border-slate-100"><td class="py-2">{{ item.departmentName }}</td>
                     <td class="py-2">{{ item.jobRoleName }}</td><td class="py-2 text-emerald-600">{{ item.finishedEarly }}</td>
-                    <td class="py-2">{{ item.averageDurationHours }}</td><td class="py-2">{{ item.averageSlaHours }}</td></tr>
+                    <td class="py-2">{{ item.averageDurationMinutes }}</td><td class="py-2">{{ item.averageAvgMinutes }}</td></tr>
                   } @empty {
                     <tr><td colspan="5" class="py-4 text-center text-slate-400">Sin datos</td></tr>
                   }
@@ -88,13 +88,13 @@ interface DashboardStats { totalTramites: number; byStatus: Record<string, numbe
               <table class="w-full text-sm">
                 <thead class="border-b border-slate-200 text-left text-slate-500">
                   <tr><th class="py-2">Departamento</th><th class="py-2">Rol</th><th class="py-2">Cantidad</th>\
-                  <th class="py-2">Promedio</th><th class="py-2">Tiempo</th></tr>
+                  <th class="py-2">Promedio (min)</th><th class="py-2">Estimado (min)</th></tr>
                 </thead>
                 <tbody>
                   @for (item of tardeRoles(); track item.departmentName + item.jobRoleName) {
                     <tr class="border-b border-slate-100"><td class="py-2">{{ item.departmentName }}</td>
                     <td class="py-2">{{ item.jobRoleName }}</td><td class="py-2 text-rose-600">{{ item.finishedLate }}</td>
-                    <td class="py-2">{{ item.averageDurationHours }}</td><td class="py-2">{{ item.averageSlaHours }}</td></tr>
+                    <td class="py-2">{{ item.averageDurationMinutes }}</td><td class="py-2">{{ item.averageAvgMinutes }}</td></tr>
                   } @empty {
                     <tr><td colspan="5" class="py-4 text-center text-slate-400">Sin datos</td></tr>
                   }

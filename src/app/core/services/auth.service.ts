@@ -1,7 +1,7 @@
 import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { catchError, switchMap, tap, throwError } from 'rxjs';
+import { Observable, catchError, finalize, shareReplay, switchMap, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
 
 export interface AuthUser {
@@ -21,6 +21,7 @@ export class AuthService {
   private http = inject(HttpClient);
   private router = inject(Router);
   private base = environment.apiUrl;
+  private refreshRequest$: Observable<string> | null = null;
 
   user = signal<AuthUser | null>(null);
   loading = signal(true);
@@ -90,10 +91,23 @@ export class AuthService {
   refreshToken() {
     const refreshToken = localStorage.getItem('refreshToken');
     if (!refreshToken) return throwError(() => new Error('No refresh token'));
-    return this.http.post<{ accessToken: string }>(`${this.base}/auth/refresh`, { refreshToken }).pipe(
+    if (this.refreshRequest$) {
+      return this.refreshRequest$;
+    }
+    this.refreshRequest$ = this.http.post<{ accessToken: string }>(`${this.base}/auth/refresh`, { refreshToken }).pipe(
       tap(res => localStorage.setItem('accessToken', res.accessToken)),
+      switchMap(res => [res.accessToken]),
+      finalize(() => {
+        this.refreshRequest$ = null;
+      }),
+      shareReplay(1),
       catchError(err => throwError(() => err))
     );
+    return this.refreshRequest$;
+  }
+
+  expireSession() {
+    this.clearSession();
   }
 
   private clearSession(redirect = true) {

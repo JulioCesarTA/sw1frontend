@@ -23,7 +23,7 @@ export interface CollaborativeWorkflowNodo {
   responsibleDepartmentId?: string;
   responsibleDepartmentName?: string;
   requiresForm: boolean;
-  avgHours: number;
+  avgMinutes: number;
   nodeType?: string;
   isConditional?: boolean;
   condition?: string;

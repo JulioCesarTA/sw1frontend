@@ -27,7 +27,7 @@ interface Nodo {
   responsibleDepartmentName?: string;
   responsibleJobRoleId?: string;
   requiresForm: boolean;
-  avgHours: number;
+  avgMinutes: number;
   condition?: string;
   trueLabel?: string;
   falseLabel?: string;
@@ -101,7 +101,7 @@ interface DiagramAiAction {
   } | null;
   trueLabel?: string;
   falseLabel?: string;
-  avgHours?: number;
+  avgMinutes?: number;
   posX?: number;
   posY?: number;
   forwardConfig?: ForwardConfig;

@@ -9,7 +9,7 @@ import { MatInputModule } from "@angular/material/input";
 import { MatProgressSpinnerModule } from "@angular/material/progress-spinner";
 import { MatSnackBar, MatSnackBarModule } from "@angular/material/snack-bar";
 import { ApiService } from "../../core/services/api.service";
-import { environment } from "../../../environments/environment";
+import { isStoredFileValue, openStoredFileDownload, storedFileLabel } from "../../core/utils/file-value.utils";
 
 interface ActivitySummary { id: string; code: string; title: string; status: string; workflowName: string; currentNodoName: string; }
 interface ActivityTransition { id: string; name?: string; label?: string; resultadoRama?: string; }
@@ -266,8 +266,8 @@ export class ActivitiesComponent implements OnInit {
   fieldValue(field: ActivityFormField) { return this.fieldValues()[field.name] ?? ""; }
   setFieldValue(field: ActivityFormField, value: unknown) { this.fieldValues.update((current) => ({ ...current, [field.name]: value })); }
   inputType(type: string) { return type === "DATE" ? "date" : type === "NUMBER" ? "number" : type === "EMAIL" ? "email" : "text"; }
-  isUploadedFile(value: unknown): value is UploadedFile { return !!value && typeof value === "object" && "storedName" in (value as Record<string, unknown>); }
-  uploadedFileName(value: unknown) { return this.isUploadedFile(value) ? value.fileName || value.storedName : ""; }
+  isUploadedFile(value: unknown): value is UploadedFile { return isStoredFileValue(value); }
+  uploadedFileName(value: unknown) { return storedFileLabel(value); }
 
   toggleVoiceCapture() {
     if (this.voiceListening()) {
@@ -289,10 +289,7 @@ export class ActivitiesComponent implements OnInit {
   }
 
   downloadFile(value: unknown) {
-    if (!this.isUploadedFile(value)) return;
-    const path = value.downloadPath || `/files/${value.storedName}/download`;
-    const separator = path.includes("?") ? "&" : "?";
-    window.open(`${environment.apiUrl}${path}${separator}filename=${encodeURIComponent(this.uploadedFileName(value))}`, "_blank");
+    openStoredFileDownload(value);
   }
 
   private startVoiceCapture() {

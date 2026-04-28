@@ -4,16 +4,16 @@ import SockJS from 'sockjs-client';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
 
-export interface WorkflowStageLock {
+export interface WorkflowNodoLock {
   workflowId: string;
-  stageId: string;
+  nodoId: string;
   sessionId: string;
   userId: string;
   userName: string;
   lockedAt: string;
 }
 
-export interface CollaborativeWorkflowStage {
+export interface CollaborativeWorkflowNodo {
   id: string;
   workflowId: string;
   name: string;
@@ -37,8 +37,8 @@ export interface CollaborativeWorkflowStage {
 export interface CollaborativeWorkflowTransition {
   id: string;
   workflowId: string;
-  fromStageId: string;
-  toStageId: string;
+  fromNodoId: string;
+  toNodoId: string;
   name?: string;
   condition?: string;
   forwardConfig?: {
@@ -49,17 +49,17 @@ export interface CollaborativeWorkflowTransition {
 }
 
 interface WorkflowCollabHandlers {
-  onSnapshot?: (locks: WorkflowStageLock[]) => void;
-  onStageLocked?: (lock: WorkflowStageLock) => void;
-  onStageUnlocked?: (stageId: string, userId?: string) => void;
-  onStageMoved?: (event: { stageId: string; x: number; y: number; userId?: string }) => void;
-  onStageCreated?: (event: { stage: CollaborativeWorkflowStage; userId?: string }) => void;
-  onStageUpdated?: (event: { stage: CollaborativeWorkflowStage; userId?: string }) => void;
-  onStageDeleted?: (event: { stageId: string; userId?: string }) => void;
+  onSnapshot?: (locks: WorkflowNodoLock[]) => void;
+  onNodoLocked?: (lock: WorkflowNodoLock) => void;
+  onNodoUnlocked?: (nodoId: string, userId?: string) => void;
+  onNodoMoved?: (event: { nodoId: string; x: number; y: number; userId?: string }) => void;
+  onNodoCreated?: (event: { nodo: CollaborativeWorkflowNodo; userId?: string }) => void;
+  onNodoUpdated?: (event: { nodo: CollaborativeWorkflowNodo; userId?: string }) => void;
+  onNodoDeleted?: (event: { nodoId: string; userId?: string }) => void;
   onTransitionCreated?: (event: { transition: CollaborativeWorkflowTransition; userId?: string }) => void;
   onTransitionUpdated?: (event: { transition: CollaborativeWorkflowTransition; userId?: string }) => void;
   onTransitionDeleted?: (event: { transitionId: string; userId?: string }) => void;
-  onLockDenied?: (event: { stageId: string; lock?: WorkflowStageLock }) => void;
+  onLockDenied?: (event: { nodoId: string; lock?: WorkflowNodoLock }) => void;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -128,35 +128,35 @@ export class WorkflowCollaborationService {
     return this.clientId;
   }
 
-  lockStage(stageId: string) {
+  lockNodo(nodoId: string) {
     if (!this.client || !this.workflowId) return;
     this.client.publish({
-      destination: `/app/workflows/${this.workflowId}/lock-stage`,
-      body: JSON.stringify({ stageId, userId: this.clientId, userName: this.auth.user()?.name ?? 'Usuario' })
+      destination: `/app/workflows/${this.workflowId}/lock-nodo`,
+      body: JSON.stringify({ nodoId, userId: this.clientId, userName: this.auth.user()?.name ?? 'Usuario' })
     });
   }
 
-  unlockStage(stageId: string) {
+  unlockNodo(nodoId: string) {
     if (!this.client || !this.workflowId) return;
     this.client.publish({
-      destination: `/app/workflows/${this.workflowId}/unlock-stage`,
-      body: JSON.stringify({ stageId, userId: this.clientId })
+      destination: `/app/workflows/${this.workflowId}/unlock-nodo`,
+      body: JSON.stringify({ nodoId, userId: this.clientId })
     });
   }
 
-  moveStage(stageId: string, x: number, y: number) {
+  moveNodo(nodoId: string, x: number, y: number) {
     if (!this.client || !this.workflowId) return;
     this.client.publish({
-      destination: `/app/workflows/${this.workflowId}/move-stage`,
-      body: JSON.stringify({ stageId, x, y, userId: this.clientId })
+      destination: `/app/workflows/${this.workflowId}/move-nodo`,
+      body: JSON.stringify({ nodoId, x, y, userId: this.clientId })
     });
   }
 
-  publishStageCreated(stage: CollaborativeWorkflowStage) {
+  publishNodoCreated(nodo: CollaborativeWorkflowNodo) {
     if (!this.client || !this.workflowId) return;
     this.client.publish({
-      destination: `/app/workflows/${this.workflowId}/stage-created`,
-      body: JSON.stringify({ stage, userId: this.clientId })
+      destination: `/app/workflows/${this.workflowId}/nodo-created`,
+      body: JSON.stringify({ nodo, userId: this.clientId })
     });
   }
 
@@ -168,23 +168,23 @@ export class WorkflowCollaborationService {
       case 'snapshot':
         this.handlers.onSnapshot?.(data.locks ?? []);
         break;
-      case 'stage_locked':
-        this.handlers.onStageLocked?.(data.lock);
+      case 'nodo_locked':
+        this.handlers.onNodoLocked?.(data.lock);
         break;
-      case 'stage_unlocked':
-        this.handlers.onStageUnlocked?.(data.stageId, data.userId);
+      case 'nodo_unlocked':
+        this.handlers.onNodoUnlocked?.(data.nodoId, data.userId);
         break;
-      case 'stage_moved':
-        this.handlers.onStageMoved?.(data);
+      case 'nodo_moved':
+        this.handlers.onNodoMoved?.(data);
         break;
-      case 'stage_created':
-        this.handlers.onStageCreated?.(data);
+      case 'nodo_created':
+        this.handlers.onNodoCreated?.(data);
         break;
-      case 'stage_updated':
-        this.handlers.onStageUpdated?.(data);
+      case 'nodo_updated':
+        this.handlers.onNodoUpdated?.(data);
         break;
-      case 'stage_deleted':
-        this.handlers.onStageDeleted?.(data);
+      case 'nodo_deleted':
+        this.handlers.onNodoDeleted?.(data);
         break;
       case 'transition_created':
         this.handlers.onTransitionCreated?.(data);

@@ -12,12 +12,12 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/services/api.service';
 import { environment } from '../../../environments/environment';
 
-interface HistoryEntry { id: string; action: string; fromStageId?: string; toStageId?: string; comment?: string; changedAt: string; stageName?: string; departmentName?: string; jobRoleName?: string; isCurrent?: boolean }
-interface TransitionOption { id: string; fromStageId: string; toStageId: string; name: string; label?: string; targetStageName?: string; kind?: string; branchOutcome?: string }
+interface HistoryEntry { id: string; action: string; fromNodoId?: string; toNodoId?: string; comment?: string; changedAt: string; nodoName?: string; departmentName?: string; jobRoleName?: string; isCurrent?: boolean }
+interface TransitionOption { id: string; fromNodoId: string; toNodoId: string; name: string; label?: string; targetNodoName?: string; tipo?: string; resultadoRama?: string }
 interface FormField { id: string; name: string; type: string; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
 interface FormDefinition { id: string; title: string; fields: FormField[] }
 interface FileValue { fileName: string; storedName: string; downloadPath?: string }
-interface TramiteDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentStageId: string; formData?: Record<string, unknown>; availableTransitions: TransitionOption[]; history: HistoryEntry[] }
+interface TramiteDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentNodoId: string; formData?: Record<string, unknown>; availableTransitions: TransitionOption[]; history: HistoryEntry[] }
 
 const H_COLOR: Record<string, string> = {
   CREADO: 'blue', RECHAZADO: 'rose', DECISION_RECHAZADA: 'orange',
@@ -115,7 +115,7 @@ const H_ICONS: Record<string, string> = {
                       <span class="text-sm font-semibold" [ngClass]="hLabelClass(h)">{{ H_LABELS[h.action] || h.action }}</span>
                       @if (h.isCurrent) { <span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">EN CURSO</span> }
                     </div>
-                    @if (h.stageName) { <p class="mt-0.5 text-xs font-medium text-slate-700">{{ h.stageName }}</p> }
+                    @if (h.nodoName) { <p class="mt-0.5 text-xs font-medium text-slate-700">{{ h.nodoName }}</p> }
                     @if (h.departmentName || h.jobRoleName) {
                       <p class="text-xs text-slate-500">{{ h.departmentName }}@if(h.departmentName && h.jobRoleName){<span class="mx-1 text-slate-300">·</span>}{{ h.jobRoleName }}</p>
                     }
@@ -157,7 +157,7 @@ export class TramiteDetailComponent implements OnInit {
   availableTransitions = computed(() => this.tramite()?.availableTransitions ?? []);
   decisionButtons = computed(() => {
     const t = this.availableTransitions();
-    return t.length && t.every(x => x.kind === 'decision-branch') ? this.dedupe(t) : [];
+    return t.length && t.every(x => x.tipo === 'rama-decision') ? this.dedupe(t) : [];
   });
   primaryTransitionId = computed(() => this.decisionButtons().length ? '' : (this.availableTransitions()[0]?.id ?? ''));
 
@@ -166,15 +166,14 @@ export class TramiteDetailComponent implements OnInit {
   load() {
     this.api.get<TramiteDetail>(`/tramites/${this.id}`).subscribe({
       next: p => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>);
-      this.loading.set(false); this.loadForm(p.currentStageId); },
+      this.loading.set(false); this.loadForm(p.currentNodoId); },
       error: () => this.loading.set(false)
     });
   }
 
   statusClass(status: string) {
     return ({ PENDIENTE: 'bg-amber-100 text-amber-800', EN_PROGRESO: 'bg-blue-100 text-blue-800',
-      COMPLETADO: 'bg-emerald-100 text-emerald-800', RECHAZADO: 'bg-rose-100 text-rose-800',
-      APROBADO: 'bg-emerald-100 text-emerald-800', OBSERVADO: 'bg-yellow-100 text-yellow-800'
+      COMPLETADO: 'bg-emerald-100 text-emerald-800', RECHAZADO: 'bg-rose-100 text-rose-800'
     } as Record<string, string>)[status] ?? 'bg-slate-100 text-slate-700';
   }
 
@@ -206,7 +205,7 @@ export class TramiteDetailComponent implements OnInit {
     const id = transitionId ?? this.primaryTransitionId();
     if (!id) return;
     this.api.post(`/activities/${this.id}/advance`, { transitionId: id, comment: this.comment, formData: this.formValues() }).subscribe({
-      next: (p: any) => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); this.comment = ''; this.loadForm(p.currentStageId); this.snack.open('Tramite avanzado', '', { duration: 2000 }); },
+      next: (p: any) => { this.tramite.set(p); this.formValues.set((p.formData ?? {}) as Record<string, unknown>); this.comment = ''; this.loadForm(p.currentNodoId); this.snack.open('Tramite avanzado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
     });
   }
@@ -223,7 +222,7 @@ export class TramiteDetailComponent implements OnInit {
   btnLabel(t: TransitionOption, i: number) { return (t.label || t.name || '').trim() || `Opcion ${i + 1}`; }
   isRejectTransition(t: TransitionOption, i: number) {
     const n = this.btnLabel(t, i).toLowerCase();
-    return t.branchOutcome === 'reject' || ['no', 'rechazar', 'rechazado', 'devolver'].includes(n);
+    return t.resultadoRama === 'rechazo' || ['no', 'rechazar', 'rechazado', 'devolver'].includes(n);
   }
 
   private dedupe(transitions: TransitionOption[]) {
@@ -231,7 +230,7 @@ export class TramiteDetailComponent implements OnInit {
     return transitions.filter((t, i) => { const k = this.btnLabel(t, i).toLowerCase(); return seen.has(k) ? false : !!seen.add(k); });
   }
 
-  private loadForm(stageId: string) {
-    this.api.get<FormDefinition>(`/forms/stage/${stageId}`).subscribe({ next: f => this.currentForm.set(f), error: () => this.currentForm.set(null) });
+  private loadForm(nodoId: string) {
+    this.api.get<FormDefinition>(`/forms/nodo/${nodoId}`).subscribe({ next: f => this.currentForm.set(f), error: () => this.currentForm.set(null) });
   }
 }

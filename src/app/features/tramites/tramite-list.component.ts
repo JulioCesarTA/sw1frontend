@@ -17,12 +17,12 @@ import { environment } from '../../../environments/environment';
 
 interface Tramite { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
 interface Workflow { id: string; name: string }
-interface WorkflowTransition { id: string; fromStageId: string; toStageId: string; name?: string }
+interface WorkflowTransition { id: string; fromNodoId: string; toNodoId: string; name?: string }
 interface FormField { id: string; name: string; type: string; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
 interface FormDefinition { id: string; title: string; fields: FormField[] }
 interface FileValue { fileName: string; storedName: string; downloadPath?: string }
-interface WorkflowStage { id: string; name: string; order: number; nodeType: string; responsibleDepartmentId?: string; responsibleJobRoleId?: string; formDefinition?: FormDefinition }
-interface WorkflowDetail extends Workflow { stages: WorkflowStage[]; transitions: WorkflowTransition[] }
+interface WorkflowNodo { id: string; name: string; order: number; nodeType: string; responsibleDepartmentId?: string; responsibleJobRoleId?: string; formDefinition?: FormDefinition }
+interface WorkflowDetail extends Workflow { nodo: WorkflowNodo[]; transitions: WorkflowTransition[] }
 
 @Component({
   selector: 'app-tramite-list',
@@ -81,10 +81,10 @@ interface WorkflowDetail extends Workflow { stages: WorkflowStage[]; transitions
             </mat-form-field>
 
             @if (loadingWorkflowDetail()) { <div class="flex justify-center pb-5 pt-2"><mat-spinner diameter="24" /></div> }
-            @else if (entryStage()) {
-              <div class="mb-4 text-sm text-slate-600"><strong>Etapa:</strong> {{ entryStage()!.name }}</div>
+            @else if (entryNodo()) {
+              <div class="mb-4 text-sm text-slate-600"><strong>Etapa:</strong> {{ entryNodo()!.name }}</div>
               @if (entryFormFields().length) {
-                <h4 class="mb-3 text-sm font-semibold text-slate-900">{{ entryStage()!.formDefinition?.title || 'Formulario' }}</h4>
+                <h4 class="mb-3 text-sm font-semibold text-slate-900">{{ entryNodo()!.formDefinition?.title || 'Formulario' }}</h4>
                 @for (field of entryFormFields(); track field.id) {
                   @if (field.type === 'FILE') {
                     <div class="mb-4 flex flex-col gap-2">
@@ -132,14 +132,14 @@ export class TramiteListComponent implements OnInit {
   loadingWorkflowDetail = signal(false);
   submitting = signal(false);
   selectedWorkflow = signal<WorkflowDetail | null>(null);
-  entryStage = signal<WorkflowStage | null>(null);
+  entryNodo = signal<WorkflowNodo | null>(null);
   autoStartTransition = signal<WorkflowTransition | null>(null);
   submitTransition = signal<WorkflowTransition | null>(null);
   formValues = signal<Record<string, unknown>>({});
   formWorkflowId = '';
   codeFilter = signal('');
 
-  entryFormFields = computed(() => [...(this.entryStage()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
+  entryFormFields = computed(() => [...(this.entryNodo()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
   filteredTramites = computed(() => {
     const f = this.codeFilter().trim().toLowerCase();
     return f ? this.tramites().filter(p => p.code.toLowerCase().includes(f)) : this.tramites();
@@ -151,7 +151,7 @@ export class TramiteListComponent implements OnInit {
   }
 
   statusClass(s: string) {
-    return ({ PENDIENTE: 'bg-amber-100 text-amber-800', EN_PROGRESO: 'bg-blue-100 text-blue-800', COMPLETADO: 'bg-emerald-100 text-emerald-800', RECHAZADO: 'bg-rose-100 text-rose-800', APROBADO: 'bg-emerald-100 text-emerald-800', OBSERVADO: 'bg-yellow-100 text-yellow-800' } as Record<string, string>)[s] ?? 'bg-slate-100 text-slate-700';
+    return ({ PENDIENTE: 'bg-amber-100 text-amber-800', EN_PROGRESO: 'bg-blue-100 text-blue-800', COMPLETADO: 'bg-emerald-100 text-emerald-800', RECHAZADO: 'bg-rose-100 text-rose-800' } as Record<string, string>)[s] ?? 'bg-slate-100 text-slate-700';
   }
 
   wfName(id: string) { return this.workflows().find(w => w.id === id)?.name || id; }
@@ -159,32 +159,32 @@ export class TramiteListComponent implements OnInit {
   openCreate() {
     this.formWorkflowId = '';
     this.formValues.set({});
-    this.selectedWorkflow.set(null); this.entryStage.set(null);
+    this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
     this.showForm.set(true);
   }
 
   onWorkflowChange(workflowId: string) {
     this.formValues.set({});
-    this.selectedWorkflow.set(null); this.entryStage.set(null);
+    this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
     if (!workflowId) return;
     this.loadingWorkflowDetail.set(true);
     this.api.get<WorkflowDetail>(`/workflows/${workflowId}`).pipe(finalize(() => this.loadingWorkflowDetail.set(false))).subscribe({
       next: wf => {
         this.selectedWorkflow.set(wf);
-        const stages = [...wf.stages].sort((a, b) => a.order - b.order);
-        const startStage = stages.find(stage => stage.nodeType.toLowerCase() === 'start') ?? null;
-        const firstWorkStage = stages.find(stage => stage.nodeType.toLowerCase() !== 'start') ?? null;
-        const startTx = startStage ? (wf.transitions.find(t => t.fromStageId === startStage.id) ?? null) : null;
-        const entry = startTx
-          ? stages.find(stage => stage.id === startTx.toStageId) ?? firstWorkStage ?? startStage
-          : firstWorkStage ?? startStage;
+        const nodo = [...wf.nodo].sort((a, b) => a.order - b.order);
+        const nodoInicio = nodo.find(nodo => nodo.nodeType.toLowerCase() === 'inicio') ?? null;
+        const primerNodoTrabajo = nodo.find(nodo => nodo.nodeType.toLowerCase() !== 'inicio') ?? null;
+        const transicionInicio = nodoInicio ? (wf.transitions.find(t => t.fromNodoId === nodoInicio.id) ?? null) : null;
+        const entry = transicionInicio
+          ? nodo.find(nodo => nodo.id === transicionInicio.toNodoId) ?? primerNodoTrabajo ?? nodoInicio
+          : primerNodoTrabajo ?? nodoInicio;
         if (!entry) return;
-        this.autoStartTransition.set(startTx);
-        this.submitTransition.set(wf.transitions.find(t => t.fromStageId === entry.id) ?? null);
-        if (entry.formDefinition?.fields?.length) { this.entryStage.set(entry); return; }
-        this.api.get<FormDefinition>(`/forms/stage/${entry.id}`).subscribe({ next: f => this.entryStage.set({ ...entry, formDefinition: f }), error: () => this.entryStage.set(entry) });
+        this.autoStartTransition.set(transicionInicio);
+        this.submitTransition.set(wf.transitions.find(t => t.fromNodoId === entry.id) ?? null);
+        if (entry.formDefinition?.fields?.length) { this.entryNodo.set(entry); return; }
+        this.api.get<FormDefinition>(`/forms/nodo/${entry.id}`).subscribe({ next: f => this.entryNodo.set({ ...entry, formDefinition: f }), error: () => this.entryNodo.set(entry) });
       },
       error: (err) => this.snack.open(err.error?.message || 'Error al cargar el workflow', '', { duration: 3000 })
     });
@@ -211,8 +211,8 @@ export class TramiteListComponent implements OnInit {
 
   save() {
     if (!this.formWorkflowId) { this.snack.open('Selecciona un workflow', '', { duration: 2500 }); return; }
-    if (!this.entryStage()) { this.snack.open('Espera a que cargue la etapa inicial', '', { duration: 3000 }); return; }
-    const wf = this.selectedWorkflow(); const entry = this.entryStage();
+    if (!this.entryNodo()) { this.snack.open('Espera a que cargue la etapa inicial', '', { duration: 3000 }); return; }
+    const wf = this.selectedWorkflow(); const entry = this.entryNodo();
     const payload = {
       title: wf && entry ? `${wf.name} - ${entry.name}` : `Tramite ${new Date().toLocaleString()}`,
       description: '', workflowId: this.formWorkflowId, formData: this.formValues(),

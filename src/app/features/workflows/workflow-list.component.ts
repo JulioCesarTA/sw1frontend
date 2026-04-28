@@ -13,7 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 
-interface Workflow { id: string; name: string; description: string; companyId?: string; companyName?: string; _count: { stages: number; tramites: number } }
+interface Workflow { id: string; name: string; description: string; companyId?: string; companyName?: string; _count: { nodo: number; tramites: number } }
 interface Company { id: string; name: string }
 
 @Component({
@@ -37,7 +37,7 @@ interface Company { id: string; name: string }
                 <small class="mt-2 inline-block text-xs font-semibold uppercase tracking-wide text-indigo-600">{{ wf.companyName || companyName(wf.companyId) }}</small>
               </div>
               <div class="mb-4 flex flex-wrap gap-4 text-sm text-slate-500">
-                <span class="flex items-center gap-1"><mat-icon class="!h-4 !w-4 !text-base">layers</mat-icon>{{ wf._count.stages }} etapas</span>
+                <span class="flex items-center gap-1"><mat-icon class="!h-4 !w-4 !text-base">layers</mat-icon>{{ wf._count.nodo }} etapas</span>
                 <span class="flex items-center gap-1"><mat-icon class="!h-4 !w-4 !text-base">description</mat-icon>{{ wf._count.tramites }} tramites</span>
               </div>
               <div class="flex items-center justify-between">

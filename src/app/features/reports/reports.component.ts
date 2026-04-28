@@ -62,12 +62,12 @@ interface DashboardStats { totalTramites: number; byStatus: Record<string, numbe
           </section>
 
           <section class="rounded-2xl border border-slate-200 bg-white p-5 xl:col-span-2">
-            <h3 class="mb-4 text-lg font-semibold text-slate-900">Antes del SLA</h3>
+            <h3 class="mb-4 text-lg font-semibold text-slate-900">Antes del Tiempo Estimado</h3>
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead class="border-b border-slate-200 text-left text-slate-500">
                   <tr><th class="py-2">Departamento</th><th class="py-2">Rol</th><th class="py-2">Cantidad</th>
-                  <th class="py-2">Promedio</th><th class="py-2">SLA</th></tr>
+                  <th class="py-2">Promedio</th><th class="py-2">Tiempo</th></tr>
                 </thead>
                 <tbody>
                   @for (item of tempranoRoles(); track item.departmentName + item.jobRoleName) {
@@ -83,12 +83,12 @@ interface DashboardStats { totalTramites: number; byStatus: Record<string, numbe
           </section>
 
           <section class="rounded-2xl border border-slate-200 bg-white p-5 xl:col-span-2">
-            <h3 class="mb-4 text-lg font-semibold text-slate-900">Despues del SLA</h3>
+            <h3 class="mb-4 text-lg font-semibold text-slate-900">Despues del Tiempo Estimado</h3>
             <div class="overflow-x-auto">
               <table class="w-full text-sm">
                 <thead class="border-b border-slate-200 text-left text-slate-500">
                   <tr><th class="py-2">Departamento</th><th class="py-2">Rol</th><th class="py-2">Cantidad</th>\
-                  <th class="py-2">Promedio</th><th class="py-2">SLA</th></tr>
+                  <th class="py-2">Promedio</th><th class="py-2">Tiempo</th></tr>
                 </thead>
                 <tbody>
                   @for (item of tardeRoles(); track item.departmentName + item.jobRoleName) {

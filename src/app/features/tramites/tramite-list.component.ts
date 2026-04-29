@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -18,16 +19,25 @@ import { isStoredFileValue, openStoredFileDownload, storedFileLabel } from '../.
 interface Tramite { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
 interface Workflow { id: string; name: string }
 interface WorkflowTransition { id: string; fromNodoId: string; toNodoId: string; name?: string }
-interface FormField { id: string; name: string; type: string; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
+interface GridColumn { id: string; name: string; type: string; order?: number }
+interface FormField { id: string; name: string; type: string; columns?: GridColumn[]; options?: string[]; required?: boolean; isRequired?: boolean; order?: number }
 interface FormDefinition { id: string; title: string; fields: FormField[] }
 interface FileValue { fileName: string; storedName: string; downloadPath?: string }
 interface WorkflowNodo { id: string; name: string; order: number; nodeType: string; responsibleDepartmentId?: string; responsibleJobRoleId?: string; formDefinition?: FormDefinition }
 interface WorkflowDetail extends Workflow { nodo: WorkflowNodo[]; transitions: WorkflowTransition[] }
+interface VoiceFillResponse { transcript: string; formData: Record<string, unknown>; appliedFields: Array<{ field: string; value: unknown }>; warnings: string[]; }
+
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => any;
+    webkitSpeechRecognition?: new () => any;
+  }
+}
 
 @Component({
   selector: 'app-tramite-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule, MatCardModule, MatButtonModule, MatIconModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule],
+  imports: [CommonModule, RouterLink, FormsModule, MatCardModule, MatButtonModule, MatCheckboxModule, MatIconModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatProgressSpinnerModule, MatSnackBarModule],
   template: `
     <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-6 py-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
@@ -70,7 +80,7 @@ interface WorkflowDetail extends Workflow { nodo: WorkflowNodo[]; transitions: W
       }
 
       @if (showForm()) {
-        <div class="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/40 px-4" (click)="showForm.set(false)">
+        <div class="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/40 px-4" (click)="closeCreate()">
           <mat-card class="max-h-[85vh] w-full max-w-[540px] overflow-auto rounded-3xl p-6 shadow-2xl" (click)="$event.stopPropagation()">
             <h3 class="mb-4 text-xl font-semibold text-slate-900">Nuevo Tramite</h3>
             <mat-form-field appearance="outline" class="w-full">
@@ -84,7 +94,13 @@ interface WorkflowDetail extends Workflow { nodo: WorkflowNodo[]; transitions: W
             @else if (entryNodo()) {
               <div class="mb-4 text-sm text-slate-600"><strong>Etapa:</strong> {{ entryNodo()!.name }}</div>
               @if (entryFormFields().length) {
-                <h4 class="mb-3 text-sm font-semibold text-slate-900">{{ entryNodo()!.formDefinition?.title || 'Formulario' }}</h4>
+                <div class="mb-3 flex items-center justify-between gap-3">
+                  <h4 class="text-sm font-semibold text-slate-900">{{ entryNodo()!.formDefinition?.title || 'Formulario' }}</h4>
+                  <button mat-stroked-button type="button" [disabled]="voiceLoading()" (click)="toggleVoiceCapture()">
+                    <mat-icon>{{ voiceListening() ? 'mic_off' : 'mic' }}</mat-icon>
+                    {{ voiceListening() ? 'Detener voz' : 'Llenar por voz' }}
+                  </button>
+                </div>
                 @for (field of entryFormFields(); track field.id) {
                   @if (field.type === 'FILE') {
                     <div class="mb-4 flex flex-col gap-2">
@@ -94,12 +110,70 @@ interface WorkflowDetail extends Workflow { nodo: WorkflowNodo[]; transitions: W
                         <button type="button" class="bg-transparent p-0 text-left text-xs text-indigo-600 underline" (click)="downloadFile(fieldValue(field))">{{ fileLabel(fieldValue(field)) }}</button>
                       }
                     </div>
+                  } @else if (field.type === 'GRID') {
+                    <div class="mb-4">
+                      <div class="mb-2 flex items-center justify-between gap-3">
+                        <label class="text-sm font-medium text-slate-700">{{ field.name }}</label>
+                        <button mat-stroked-button type="button" (click)="addGridRow(field)">Agregar fila</button>
+                      </div>
+                      @if (gridColumns(field).length) {
+                        <div class="overflow-x-auto rounded-xl border border-slate-200">
+                          <table class="min-w-full text-sm">
+                            <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              <tr>
+                                @for (column of gridColumns(field); track column.id) {
+                                  <th class="px-3 py-2">{{ column.name }}</th>
+                                }
+                                <th class="w-[90px] px-3 py-2"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              @for (row of gridRows(field); track rowIndex; let rowIndex = $index) {
+                                <tr class="border-t border-slate-100">
+                                @for (column of gridColumns(field); track column.id) {
+                                  <td class="px-3 py-2">
+                                      @if (column.type === 'CHECKBOX') {
+                                        <mat-checkbox [ngModel]="toBoolean(row[column.name])" (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)"></mat-checkbox>
+                                      } @else {
+                                        <input
+                                          class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                                          [type]="inputType(column.type)"
+                                          [ngModel]="row[column.name] ?? ''"
+                                          (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)">
+                                      }
+                                    </td>
+                                  }
+                                  <td class="px-3 py-2 text-right">
+                                    <button mat-button color="warn" type="button" (click)="removeGridRow(field, rowIndex)">Quitar</button>
+                                  </td>
+                                </tr>
+                              } @empty {
+                                <tr>
+                                  <td class="px-3 py-4 text-center text-sm text-slate-400" [attr.colspan]="gridColumns(field).length + 1">Sin filas</td>
+                                </tr>
+                              }
+                            </tbody>
+                          </table>
+                        </div>
+                      } @else {
+                        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                          Esta grilla no tiene columnas configuradas.
+                        </div>
+                      }
+                    </div>
+                  } @else if (field.type === 'CHECKBOX') {
+                    <div class="mb-4 rounded-xl border border-slate-200 px-3 py-2">
+                      <mat-checkbox [ngModel]="toBoolean(fieldValue(field))" (ngModelChange)="setFieldValue(field, $event)">
+                        {{ field.name }}
+                      </mat-checkbox>
+                    </div>
                   } @else {
                     <mat-form-field appearance="outline" class="w-full">
                       <mat-label>{{ field.name }}</mat-label>
                       @switch (field.type) {
                         @case ('DATE') { <input matInput type="date" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
                         @case ('NUMBER') { <input matInput type="number" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
+                        @case ('EMAIL') { <input matInput type="email" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
                         @default { <input matInput [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field,$event)" [required]="isRequired(field)"> }
                       }
                     </mat-form-field>
@@ -111,7 +185,7 @@ interface WorkflowDetail extends Workflow { nodo: WorkflowNodo[]; transitions: W
             }
 
             <div class="mt-2 flex justify-end gap-2">
-              <button mat-button (click)="showForm.set(false)">Cancelar</button>
+              <button mat-button (click)="closeCreate()">Cancelar</button>
               <button mat-flat-button color="primary" (click)="save()" [disabled]="loadingWorkflowDetail() || submitting()">{{ submitting() ? 'Enviando...' : 'Enviar' }}</button>
             </div>
           </mat-card>
@@ -136,8 +210,12 @@ export class TramiteListComponent implements OnInit {
   autoStartTransition = signal<WorkflowTransition | null>(null);
   submitTransition = signal<WorkflowTransition | null>(null);
   formValues = signal<Record<string, unknown>>({});
+  voiceListening = signal(false);
+  voiceLoading = signal(false);
+  voiceTranscript = signal('');
   formWorkflowId = '';
   codeFilter = signal('');
+  private speechRecognition: any = null;
 
   entryFormFields = computed(() => [...(this.entryNodo()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
   filteredTramites = computed(() => {
@@ -157,6 +235,8 @@ export class TramiteListComponent implements OnInit {
   wfName(id: string) { return this.workflows().find(w => w.id === id)?.name || id; }
 
   openCreate() {
+    this.stopVoiceCapture(false);
+    this.voiceTranscript.set('');
     this.formWorkflowId = '';
     this.formValues.set({});
     this.selectedWorkflow.set(null); this.entryNodo.set(null);
@@ -164,7 +244,14 @@ export class TramiteListComponent implements OnInit {
     this.showForm.set(true);
   }
 
+  closeCreate() {
+    this.stopVoiceCapture(false);
+    this.showForm.set(false);
+  }
+
   onWorkflowChange(workflowId: string) {
+    this.stopVoiceCapture(false);
+    this.voiceTranscript.set('');
     this.formValues.set({});
     this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
@@ -204,6 +291,40 @@ export class TramiteListComponent implements OnInit {
   isRequired(f: FormField) { return !!(f.required || f.isRequired); }
   fieldValue(f: FormField) { return this.formValues()[f.name] ?? ''; }
   setFieldValue(f: FormField, v: unknown) { this.formValues.update(vals => ({ ...vals, [f.name]: v })); }
+  inputType(type: string) { return type === 'DATE' ? 'date' : type === 'NUMBER' ? 'number' : type === 'EMAIL' ? 'email' : 'text'; }
+  toBoolean(value: unknown) { return value === true; }
+
+  gridColumns(field: FormField) {
+    return [...(field.columns ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  }
+
+  gridRows(field: FormField) {
+    const value = this.formValues()[field.name];
+    return Array.isArray(value) ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === 'object' && !Array.isArray(row)) : [];
+  }
+
+  addGridRow(field: FormField) {
+    const columns = this.gridColumns(field);
+    if (!columns.length) {
+      this.snack.open('La grilla no tiene columnas configuradas', '', { duration: 2500 });
+      return;
+    }
+    const nextRow = Object.fromEntries(columns.map(column => [column.name, '']));
+    this.setFieldValue(field, [...this.gridRows(field), nextRow]);
+  }
+
+  removeGridRow(field: FormField, rowIndex: number) {
+    this.setFieldValue(field, this.gridRows(field).filter((_, index) => index !== rowIndex));
+  }
+
+  setGridCellValue(field: FormField, rowIndex: number, column: GridColumn, value: unknown) {
+    const rows = this.gridRows(field).map(row => ({ ...row }));
+    if (!rows[rowIndex]) {
+      rows[rowIndex] = {};
+    }
+    rows[rowIndex] = { ...rows[rowIndex], [column.name]: value };
+    this.setFieldValue(field, rows);
+  }
 
   isFileValue(v: unknown): v is FileValue { return isStoredFileValue(v); }
   fileLabel(v: unknown) { return storedFileLabel(v); }
@@ -215,7 +336,48 @@ export class TramiteListComponent implements OnInit {
     const file = (event.target as HTMLInputElement)?.files?.[0];
     if (!file) return;
     const body = new FormData(); body.append('file', file);
-    this.api.post<FileValue>('/files/upload', body).subscribe({ next: u => this.setFieldValue(field, u), error: () => this.snack.open('Error al subir archivo', '', { duration: 3000 }) });
+    this.api.post<FileValue>('/files/upload', body).subscribe({ next: u => { this.setFieldValue(field, u); this.snack.open(`Archivo "${u.fileName || file.name}" subido`, '', { duration: 3000 }); }, error: () => this.snack.open('Error al subir archivo', '', { duration: 3000 }) });
+  }
+
+  toggleVoiceCapture() {
+    if (this.voiceListening()) {
+      this.stopVoiceCapture(true);
+      return;
+    }
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      this.snack.open('Tu navegador no soporta reconocimiento de voz', '', { duration: 3500 });
+      return;
+    }
+    if (!this.formWorkflowId || !this.entryFormFields().length) {
+      this.snack.open('El workflow actual no tiene formulario para completar por voz', '', { duration: 3000 });
+      return;
+    }
+    this.speechRecognition = new SpeechRecognitionCtor();
+    this.speechRecognition.lang = 'es-ES';
+    this.speechRecognition.continuous = false;
+    this.speechRecognition.interimResults = false;
+    this.speechRecognition.onstart = () => {
+      this.voiceListening.set(true);
+      this.voiceTranscript.set('');
+    };
+    this.speechRecognition.onerror = () => {
+      this.voiceListening.set(false);
+      this.snack.open('No se pudo capturar la voz', '', { duration: 3000 });
+    };
+    this.speechRecognition.onend = () => {
+      this.voiceListening.set(false);
+    };
+    this.speechRecognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results ?? [])
+        .map((result: any) => result?.[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      this.voiceTranscript.set(transcript);
+      this.applyVoiceTranscript(transcript);
+    };
+    this.speechRecognition.start();
   }
 
   save() {
@@ -230,8 +392,39 @@ export class TramiteListComponent implements OnInit {
     };
     this.submitting.set(true);
     this.api.post<any>('/tramites/submit', payload).pipe(finalize(() => this.submitting.set(false))).subscribe({
-      next: (p: any) => { this.tramites.update(list => [p, ...list.filter(i => i.id !== p.id)]); this.showForm.set(false); this.snack.open('Tramite enviado', '', { duration: 2500 }); },
+      next: (p: any) => { this.tramites.update(list => [p, ...list.filter(i => i.id !== p.id)]); this.closeCreate(); this.snack.open('Tramite enviado', '', { duration: 2500 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error al enviar', '', { duration: 3500 })
+    });
+  }
+
+  private stopVoiceCapture(showMessage: boolean) {
+    if (this.speechRecognition) {
+      this.speechRecognition.stop();
+      this.speechRecognition = null;
+    }
+    if (showMessage) {
+      this.snack.open('Captura de voz detenida', '', { duration: 1800 });
+    }
+    this.voiceListening.set(false);
+  }
+
+  private applyVoiceTranscript(transcript: string) {
+    this.voiceLoading.set(true);
+    this.api.post<VoiceFillResponse>('/tramites/voice-fill', {
+      workflowId: this.formWorkflowId,
+      transcript,
+      formData: this.formValues()
+    }).pipe(finalize(() => this.voiceLoading.set(false))).subscribe({
+      next: (response) => {
+        this.formValues.set({ ...response.formData });
+        const applied = response.appliedFields?.length ?? 0;
+        if (applied > 0) {
+          this.snack.open(`Se completaron ${applied} campo(s) por voz`, '', { duration: 2500 });
+        } else {
+          this.snack.open(response.warnings?.[0] || 'No se detectaron valores aplicables', '', { duration: 3000 });
+        }
+      },
+      error: (err) => this.snack.open(err.error?.message || 'No se pudo interpretar la voz', '', { duration: 3000 })
     });
   }
 }

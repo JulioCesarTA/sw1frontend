@@ -36,24 +36,24 @@ class InicioBehavior extends BaseNodeBehavior {
   readonly type = 'inicio' as const;
   readonly isHuman = false;
   readonly isLogical = false;
-  readonly width = 82;
-  readonly height = 82;
+  readonly width = 52;
+  readonly height = 52;
 }
 
 class ProcesoBehavior extends BaseNodeBehavior {
   readonly type = 'proceso' as const;
   readonly isHuman = true;
   readonly isLogical = false;
-  readonly width = 210;
-  readonly height = 140;
+  readonly width = 150;
+  readonly height = 44;
 }
 
 class DecisionBehavior extends BaseNodeBehavior {
   readonly type = 'decision' as const;
   readonly isHuman = false;
   readonly isLogical = true;
-  readonly width = 104;
-  readonly height = 104;
+  readonly width = 80;
+  readonly height = 80;
 
   override defaultTransitionName(outgoingCount: number) {
     return outgoingCount === 0 ? 'Aceptar' : 'Rechazar';
@@ -64,11 +64,11 @@ class BifurcasionBehavior extends BaseNodeBehavior {
   readonly type = 'bifurcasion' as const;
   readonly isHuman = false;
   readonly isLogical = true;
-  readonly width = 150;
-  readonly height = 44;
+  readonly width = 120;
+  readonly height = 8;
 
   override resolveCenter(posX: number, posY: number) {
-    return { x: posX + 75, y: posY + 8 };
+    return { x: posX + 60, y: posY + 4 };
   }
 }
 
@@ -76,11 +76,11 @@ class UnionBehavior extends BaseNodeBehavior {
   readonly type = 'union' as const;
   readonly isHuman = false;
   readonly isLogical = true;
-  readonly width = 150;
-  readonly height = 44;
+  readonly width = 120;
+  readonly height = 8;
 
   override resolveCenter(posX: number, posY: number) {
-    return { x: posX + 75, y: posY + 8 };
+    return { x: posX + 60, y: posY + 4 };
   }
 }
 
@@ -88,16 +88,16 @@ class FinBehavior extends BaseNodeBehavior {
   readonly type = 'fin' as const;
   readonly isHuman = false;
   readonly isLogical = false;
-  readonly width = 82;
-  readonly height = 82;
+  readonly width = 56;
+  readonly height = 56;
 }
 
 class IteracionBehavior extends BaseNodeBehavior {
   readonly type = 'iteracion' as const;
   readonly isHuman = false;
   readonly isLogical = true;
-  readonly width = 104;
-  readonly height = 104;
+  readonly width = 80;
+  readonly height = 80;
 
   override defaultTransitionName(outgoingCount: number) {
     return outgoingCount === 0 ? 'Aceptar' : 'Repetir';

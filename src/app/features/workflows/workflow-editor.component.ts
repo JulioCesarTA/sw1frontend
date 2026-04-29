@@ -24,8 +24,9 @@ import {
 } from '../../core/services/workflow-collaboration.service';
 
 type NodeType = 'inicio' | 'proceso' | 'decision' | 'bifurcasion' | 'union' | 'fin' | 'iteracion';
-type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'EMAIL';
-type ForwardMode = 'selected' | 'none';
+type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'EMAIL' | 'CHECKBOX' | 'GRID';
+type GridColumnType = 'TEXT' | 'NUMBER' | 'DATE' | 'EMAIL' | 'CHECKBOX';
+type ForwardMode = 'selected' | 'none' | 'all' | 'files-only';
 
 interface Workflow {
   id: string;
@@ -41,8 +42,16 @@ interface FormField {
   id: string;
   name: string;
   type: FieldType;
+  columns?: GridColumn[];
   options?: string[];
   isRequired?: boolean;
+  order: number;
+}
+
+interface GridColumn {
+  id: string;
+  name: string;
+  type: GridColumnType;
   order: number;
 }
 
@@ -75,6 +84,7 @@ interface Nodo {
 interface ForwardConfig {
   mode?: ForwardMode;
   fieldNames?: string[];
+  includeFiles?: boolean;
 }
 
 interface Transition {
@@ -127,6 +137,7 @@ interface NodoForm {
 interface TransitionForm {
   mode: ForwardMode;
   fieldNames: string[];
+  includeFiles: boolean;
 }
 
 interface ResolvedNodoField extends FormField {
@@ -157,6 +168,12 @@ interface DiagramAiAction {
       id?: string;
       name?: string;
       type?: FieldType;
+      columns?: Array<{
+        id?: string;
+        name?: string;
+        type?: GridColumnType;
+        order?: number;
+      }>;
       required?: boolean;
       order?: number;
     }>;
@@ -281,11 +298,11 @@ interface DiagramAiAction {
 
                   <svg class="absolute inset-0 z-0 h-full w-full overflow-visible">
                     <defs>
-                      <marker id="arrow-default" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
-                        <path d="M0,0 L10,5 L0,10 z" fill="#334155"></path>
+                      <marker id="arrow-default" markerWidth="14" markerHeight="10" refX="13" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                        <path d="M0,0 L14,5 L0,10 z" fill="#334155"></path>
                       </marker>
-                      <marker id="arrow-selected" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
-                        <path d="M0,0 L10,5 L0,10 z" fill="#4f46e5"></path>
+                      <marker id="arrow-selected" markerWidth="14" markerHeight="10" refX="13" refY="5" orient="auto" markerUnits="userSpaceOnUse">
+                        <path d="M0,0 L14,5 L0,10 z" fill="#4f46e5"></path>
                       </marker>
                     </defs>
 
@@ -301,16 +318,18 @@ interface DiagramAiAction {
                             stroke-width="2.2"
                             fill="none"
                             [attr.marker-end]="selectedTransitionId() === transition.id ? 'url(#arrow-selected)' : 'url(#arrow-default)'"></path>
-                      @if (transitionLabelPosition(transition); as labelPos) {
-                        <g class="cursor-pointer" (click)="onTransitionClick(transition, $event)">
-                          <rect [attr.x]="labelPos.x - 34" [attr.y]="labelPos.y - 12" width="68" height="24" rx="12"
-                                fill="white"
-                                [attr.stroke]="selectedTransitionId() === transition.id ? '#4f46e5' : '#cbd5e1'"></rect>
-                          <text [attr.x]="labelPos.x" [attr.y]="labelPos.y + 4" text-anchor="middle" font-size="11" font-weight="700"
-                                [attr.fill]="selectedTransitionId() === transition.id ? '#4f46e5' : '#334155'">
-                            {{ transition.name || 'flujo' }}
-                          </text>
-                        </g>
+                      @if (transitionLabel(transition); as label) {
+                        @if (transitionLabelPosition(transition); as labelPos) {
+                          <g class="cursor-pointer" (click)="onTransitionClick(transition, $event)">
+                            <rect [attr.x]="labelPos.x - 34" [attr.y]="labelPos.y - 12" width="68" height="24" rx="12"
+                                  fill="white"
+                                  [attr.stroke]="selectedTransitionId() === transition.id ? '#4f46e5' : '#cbd5e1'"></rect>
+                            <text [attr.x]="labelPos.x" [attr.y]="labelPos.y + 4" text-anchor="middle" font-size="11" font-weight="700"
+                                  [attr.fill]="selectedTransitionId() === transition.id ? '#4f46e5' : '#334155'">
+                              {{ label }}
+                            </text>
+                          </g>
+                        }
                       }
                     }
                   </svg>
@@ -334,56 +353,28 @@ interface DiagramAiAction {
 
                         @switch (tipoNodo(nodo)) {
                           @case ('inicio') {
-                            <div class="flex h-[82px] w-[82px] items-center justify-center rounded-full bg-slate-800 text-sm font-bold text-white shadow">
-                              {{ nodo.name }}
-                            </div>
+                            <div class="h-[52px] w-[52px] rounded-full bg-slate-900 shadow-md"></div>
                           }
                           @case ('fin') {
-                            <div class="flex h-[82px] w-[82px] items-center justify-center rounded-full border-[6px] border-slate-800 bg-white text-sm font-bold text-slate-900 shadow">
-                              {{ nodo.name }}
+                            <div class="flex h-[56px] w-[56px] items-center justify-center rounded-full border-[5px] border-slate-900 bg-white shadow-md">
+                              <div class="h-[32px] w-[32px] rounded-full bg-slate-900"></div>
                             </div>
                           }
                           @case ('decision') {
-                            <div class="relative h-[104px] w-[104px] rotate-45 rounded-2xl border-[3px] border-amber-500 bg-white shadow">
-                              <div class="-rotate-45 absolute inset-0 flex items-center justify-center px-3 text-center text-sm font-semibold text-slate-900">
-                                {{ nodo.name }}
-                              </div>
-                            </div>
+                            <div class="h-[80px] w-[80px] rotate-45 border-[2px] border-slate-700 bg-white shadow"></div>
                           }
                           @case ('iteracion') {
-                            <div class="relative h-[104px] w-[104px] rotate-45 rounded-2xl border-[3px] border-orange-500 bg-white shadow">
-                              <div class="-rotate-45 absolute inset-0 flex items-center justify-center px-3 text-center text-sm font-semibold text-slate-900">
-                                {{ nodo.name }}
-                              </div>
-                            </div>
+                            <div class="h-[80px] w-[80px] rotate-45 border-[2px] border-slate-700 bg-white shadow"></div>
                           }
                           @case ('bifurcasion') {
-                            <div class="flex min-w-[150px] flex-col items-center gap-2">
-                              <div class="h-[16px] w-[140px] rounded-full bg-slate-800"></div>
-                              <div class="text-center text-sm font-semibold text-slate-900">{{ nodo.name || 'Bifurcacion' }}</div>
-                            </div>
+                            <div class="h-[8px] w-[120px] rounded bg-slate-900"></div>
                           }
                           @case ('union') {
-                            <div class="flex min-w-[150px] flex-col items-center gap-2">
-                              <div class="h-[16px] w-[140px] rounded-full bg-slate-800"></div>
-                              <div class="text-center text-sm font-semibold text-slate-900">{{ nodo.name || 'Union' }}</div>
-                            </div>
+                            <div class="h-[8px] w-[120px] rounded bg-slate-900"></div>
                           }
                           @default {
-                            <div class="w-[210px] rounded-[20px] border-2 border-blue-600 bg-white p-4 shadow">
-                              <div class="flex items-start justify-between gap-2">
-                                <div class="text-base font-semibold text-slate-950">{{ nodo.name }}</div>
-                                @if (nodo.requiresForm) {
-                                  <span class="rounded-full bg-indigo-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-indigo-700">Formulario</span>
-                                }
-                              </div>
-                              @if (nodo.description) {
-                                <div class="mt-1 text-sm text-slate-500">{{ nodo.description }}</div>
-                              }
-                              @if (nodo.responsibleDepartmentName) {
-                                <div class="mt-3 text-sm font-medium text-slate-700">{{ nodo.responsibleDepartmentName }}</div>
-                              }
-                              <div class="mt-3 text-xs text-slate-500">Promedio {{ nodo.avgMinutes }} min</div>
+                            <div class="flex w-[150px] items-center justify-center rounded-[14px] border-2 border-slate-700 bg-white px-3 py-2.5 shadow-sm">
+                              <div class="text-center text-sm font-semibold text-slate-900">{{ nodo.name }}</div>
                             </div>
                           }
                         }
@@ -435,15 +426,17 @@ interface DiagramAiAction {
                   </div>
                 }
 
-                <mat-form-field appearance="outline" class="w-full">
-                  <mat-label>Nombre</mat-label>
-                  <input matInput [(ngModel)]="nodoForm.name">
-                </mat-form-field>
+                @if (nodoForm.nodeType !== 'decision' && nodoForm.nodeType !== 'iteracion') {
+                  <mat-form-field appearance="outline" class="w-full">
+                    <mat-label>Nombre</mat-label>
+                    <input matInput [(ngModel)]="nodoForm.name">
+                  </mat-form-field>
 
-                <mat-form-field appearance="outline" class="w-full">
-                  <mat-label>Descripcion</mat-label>
-                  <textarea matInput rows="3" [(ngModel)]="nodoForm.description"></textarea>
-                </mat-form-field>
+                  <mat-form-field appearance="outline" class="w-full">
+                    <mat-label>Descripcion</mat-label>
+                    <textarea matInput rows="3" [(ngModel)]="nodoForm.description"></textarea>
+                  </mat-form-field>
+                }
 
                 <mat-form-field appearance="outline" class="w-full">
                   <mat-label>Tipo</mat-label>
@@ -500,13 +493,42 @@ interface DiagramAiAction {
                               </mat-form-field>
                               <mat-form-field appearance="outline" class="w-full">
                                 <mat-label>Tipo</mat-label>
-                                <mat-select [(ngModel)]="field.type">
+                                <mat-select [ngModel]="field.type" (ngModelChange)="onFieldTypeChange(field, $event)">
                                   @for (type of fieldTypes; track type) {
                                     <mat-option [value]="type">{{ type }}</mat-option>
                                   }
                                 </mat-select>
                               </mat-form-field>
                             </div>
+                            @if (field.type === 'GRID') {
+                              <div class="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-2">
+                                <div class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-600">Columnas de la grilla</div>
+                                <div class="flex flex-col gap-1.5">
+                                  @for (column of field.columns || []; track column.id; let j = $index) {
+                                    <div class="flex items-center gap-1.5">
+                                      <input
+                                        class="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400"
+                                        placeholder="Nombre"
+                                        [(ngModel)]="column.name" />
+                                      <select
+                                        class="w-[90px] shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-800 outline-none focus:border-indigo-400"
+                                        [(ngModel)]="column.type">
+                                        @for (type of gridColumnTypes; track type) {
+                                          <option [value]="type">{{ type }}</option>
+                                        }
+                                      </select>
+                                      <button
+                                        type="button"
+                                        class="shrink-0 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-100"
+                                        (click)="removeGridColumn(field, j)">✕</button>
+                                    </div>
+                                  }
+                                </div>
+                                <button mat-stroked-button class="mt-2 w-full" (click)="addGridColumn(field)">
+                                  <mat-icon>view_column</mat-icon> Agregar columna
+                                </button>
+                              </div>
+                            }
                             <div class="mt-2 flex items-center justify-between">
                               <mat-checkbox [(ngModel)]="field.isRequired">Obligatorio</mat-checkbox>
                               <button mat-button color="warn" (click)="removeFormField(i)">Quitar</button>
@@ -535,10 +557,6 @@ interface DiagramAiAction {
                     </mat-form-field>
                   </div>
 
-                  <mat-form-field appearance="outline" class="w-full">
-                    <mat-label>Condicion</mat-label>
-                    <input matInput [(ngModel)]="nodoForm.condition">
-                  </mat-form-field>
                 }
 
                 <div class="mt-3 flex justify-end">
@@ -555,13 +573,21 @@ interface DiagramAiAction {
                   {{ sourceNodoName(selectedTransition()!) }} -> {{ targetNodoName(selectedTransition()!) }}
                 </div>
 
-                  <mat-form-field appearance="outline" class="w-full">
-                    <mat-label>Que parte del formulario pasa</mat-label>
-                    <mat-select [(ngModel)]="transitionForm.mode">
-                      <mat-option value="none">No pasar campos</mat-option>
-                      <mat-option value="selected">Seleccionar campos</mat-option>
-                    </mat-select>
-                  </mat-form-field>
+                    <mat-form-field appearance="outline" class="w-full">
+                      <mat-label>Que parte del formulario pasa</mat-label>
+                      <mat-select [(ngModel)]="transitionForm.mode">
+                        <mat-option value="none">No pasar campos</mat-option>
+                        <mat-option value="all">Pasar todo el formulario</mat-option>
+                        <mat-option value="selected">Seleccionar campos</mat-option>
+                        <mat-option value="files-only">Solo archivos</mat-option>
+                      </mat-select>
+                    </mat-form-field>
+
+                  @if (transitionForm.mode === 'selected' || transitionForm.mode === 'all') {
+                    <mat-checkbox class="mb-3" [(ngModel)]="transitionForm.includeFiles">
+                      Incluir archivos
+                    </mat-checkbox>
+                  }
 
                   @if (availableForwardFields().length) {
                     <div class="rounded-2xl border border-slate-200 p-3">
@@ -640,7 +666,8 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   private collab = inject(WorkflowCollaborationService);
   private nodeBehaviorResolver = new NodeBehaviorResolver();
 
-  readonly fieldTypes: FieldType[] = ['TEXT', 'NUMBER', 'DATE', 'FILE', 'EMAIL'];
+  readonly fieldTypes: FieldType[] = ['TEXT', 'NUMBER', 'DATE', 'FILE', 'EMAIL', 'CHECKBOX', 'GRID'];
+  readonly gridColumnTypes: GridColumnType[] = ['TEXT', 'NUMBER', 'DATE', 'EMAIL', 'CHECKBOX'];
   readonly palette = [
     { type: 'inicio' as NodeType, label: 'Inicio', icon: 'play_circle' },
     { type: 'proceso' as NodeType, label: 'Proceso', icon: 'settings' },
@@ -672,12 +699,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     if (!transition) return [] as ResolvedNodoField[];
     return this.resolveFieldsAvailableAtNodo(transition.fromNodoId);
   });
-    resolvedForwardFields = computed(() => {
-      const fields: ResolvedNodoField[] = this.availableForwardFields();
-      return this.transitionForm.mode === 'selected'
-        ? fields.filter((field: ResolvedNodoField) => this.transitionForm.fieldNames.includes(field.name))
-        : [];
-    });
+    resolvedForwardFields = computed(() => this.filterForwardFields(this.availableForwardFields(), this.transitionForm));
   incomingFieldsForSelectedNodo = computed(() => {
     const nodo = this.selectedNodo();
     const workflow = this.workflow();
@@ -824,8 +846,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     this.sidebarTab.set('inspector');
     this.ensureReachableFormsLoaded(transition.fromNodoId);
     this.transitionForm = {
-      mode: transition.forwardConfig?.mode === 'selected' ? 'selected' : 'none',
-      fieldNames: [...(transition.forwardConfig?.fieldNames ?? [])]
+      mode: this.normalizeForwardMode(transition.forwardConfig?.mode),
+      fieldNames: [...(transition.forwardConfig?.fieldNames ?? [])],
+      includeFiles: Boolean(transition.forwardConfig?.includeFiles)
     };
   }
 
@@ -884,6 +907,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
         id: field.id || this.createFieldId(),
         name: field.name,
         type: field.type,
+        columns: field.type === 'GRID'
+          ? this.normalizeGridColumns(field.columns)
+          : [],
         isRequired: Boolean(field.isRequired),
         order: index + 1
       }))
@@ -908,6 +934,8 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
         this.upsertNodo({
           ...nodo,
           ...saved,
+          trueLabel: this.nodoForm.trueLabel,
+          falseLabel: this.nodoForm.falseLabel,
           requiresForm,
           formDefinition: formDefinition ?? undefined
         });
@@ -923,7 +951,8 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       this.api.patch<Transition>(`/workflow-transitions/${transition.id}`, {
         forwardConfig: {
           mode: this.transitionForm.mode,
-          fieldNames: this.transitionForm.mode === 'selected' ? this.transitionForm.fieldNames : []
+          fieldNames: this.transitionForm.mode === 'selected' ? this.transitionForm.fieldNames : [],
+          includeFiles: this.transitionForm.mode === 'files-only' || this.transitionForm.includeFiles
         }
       }).subscribe({
       next: saved => {
@@ -937,12 +966,30 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   addFormField() {
     this.nodoForm.formFields = [
       ...this.nodoForm.formFields,
-      { id: this.createFieldId(), name: `campo_${this.nodoForm.formFields.length + 1}`, type: 'TEXT', isRequired: false, order: this.nodoForm.formFields.length + 1 }
+      { id: this.createFieldId(), name: `campo_${this.nodoForm.formFields.length + 1}`, type: 'TEXT', columns: [], isRequired: false, order: this.nodoForm.formFields.length + 1 }
     ];
   }
 
   removeFormField(index: number) {
     this.nodoForm.formFields = this.nodoForm.formFields.filter((_, i) => i !== index).map((field, i) => ({ ...field, order: i + 1 }));
+  }
+
+  onFieldTypeChange(field: FormField, type: FieldType) {
+    field.type = type;
+    field.columns = type === 'GRID'
+      ? this.normalizeGridColumns(field.columns?.length ? field.columns : [this.createGridColumn(1)])
+      : [];
+  }
+
+  addGridColumn(field: FormField) {
+    field.columns = [
+      ...(field.columns ?? []),
+      this.createGridColumn((field.columns?.length ?? 0) + 1)
+    ];
+  }
+
+  removeGridColumn(field: FormField, index: number) {
+    field.columns = this.normalizeGridColumns((field.columns ?? []).filter((_, i) => i !== index));
   }
 
   toggleForwardField(fieldName: string, checked: boolean) {
@@ -994,8 +1041,39 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     const source = this.nodoCenter(transition.fromNodoId);
     const target = this.nodoCenter(transition.toNodoId);
     if (!source || !target) return '';
-    const middleX = source.x + (target.x - source.x) / 2;
-    return `M ${source.x} ${source.y} C ${middleX} ${source.y}, ${middleX} ${target.y}, ${target.x} ${target.y}`;
+    const fromNodo = this.workflow()?.nodo.find(n => n.id === transition.fromNodoId);
+    const fromType = fromNodo ? this.tipoNodo(fromNodo) : '';
+    let from: { x: number; y: number };
+    if ((fromType === 'decision' || fromType === 'iteracion') && fromNodo) {
+      const hw = this.nodeBehaviorResolver.resolve(fromNodo).width / 2;
+      from = target.x >= source.x
+        ? { x: source.x + hw, y: source.y }
+        : { x: source.x - hw, y: source.y };
+    } else {
+      from = this.nodoEdgePoint(transition.fromNodoId, target.x, target.y) ?? source;
+    }
+    const to = this.nodoEdgePoint(transition.toNodoId, source.x, source.y) ?? target;
+    return `M ${from.x} ${from.y} L ${to.x} ${to.y}`;
+  }
+
+  transitionLabel(transition: Transition): string | null {
+    const src = this.workflow()?.nodo.find(n => n.id === transition.fromNodoId);
+    const workflow = this.workflow();
+    if (!src) return null;
+    const type = this.tipoNodo(src);
+    if (type !== 'decision' && type !== 'iteracion') return null;
+    const outgoingTransitions = (workflow?.transitions ?? []).filter(item => item.fromNodoId === transition.fromNodoId);
+    const transitionIndex = outgoingTransitions.findIndex(item => item.id === transition.id);
+    if (transitionIndex === 0) {
+      return src.trueLabel || 'Si';
+    }
+    if (transitionIndex === 1) {
+      return src.falseLabel || 'No';
+    }
+    const sc = this.nodoCenter(transition.fromNodoId);
+    const tc = this.nodoCenter(transition.toNodoId);
+    if (!sc || !tc) return src.trueLabel || 'Si';
+    return tc.x >= sc.x ? (src.trueLabel || 'Si') : (src.falseLabel || 'No');
   }
 
   transitionLabelPosition(transition: Transition) {
@@ -1003,6 +1081,30 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     const target = this.nodoCenter(transition.toNodoId);
     if (!source || !target) return null;
     return { x: (source.x + target.x) / 2, y: (source.y + target.y) / 2 };
+  }
+
+  private nodoEdgePoint(nodoId: string, fromX: number, fromY: number): { x: number; y: number } | null {
+    const center = this.nodoCenter(nodoId);
+    if (!center) return null;
+    const nodo = this.workflow()?.nodo.find(item => item.id === nodoId);
+    if (!nodo) return null;
+    const dx = fromX - center.x;
+    const dy = fromY - center.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist === 0) return center;
+    const nx = dx / dist;
+    const ny = dy / dist;
+    const type = this.tipoNodo(nodo);
+    if (type === 'inicio' || type === 'fin') {
+      const r = this.nodeBehaviorResolver.resolve(nodo).width / 2;
+      return { x: center.x + nx * r, y: center.y + ny * r };
+    }
+    const hw = this.nodeBehaviorResolver.resolve(nodo).width / 2;
+    const hh = Math.max(this.nodeBehaviorResolver.resolve(nodo).height / 2, 8);
+    const tx = nx !== 0 ? Math.abs(hw / nx) : Infinity;
+    const ty = ny !== 0 ? Math.abs(hh / ny) : Infinity;
+    const t = Math.min(tx, ty);
+    return { x: center.x + nx * t, y: center.y + ny * t };
   }
 
   sourceNodoName(transition: Transition) {
@@ -1190,6 +1292,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
         id: field.id || this.createFieldId(),
         name: field.name || `campo_${index + 1}`,
         type: field.type || 'TEXT',
+        columns: field.type === 'GRID' ? this.normalizeGridColumns(field.columns) : [],
         isRequired: Boolean(field.required),
         order: field.order || index + 1
       }))
@@ -1406,7 +1509,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       condition: nodo.condition || '',
       requiresForm: Boolean(nodo.requiresForm),
       formTitle: nodo.formDefinition?.title || 'Formulario',
-      formFields: [...(nodo.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(field => ({ ...field }))
+      formFields: [...(nodo.formDefinition?.fields ?? [])]
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map(field => ({ ...field, columns: this.normalizeGridColumns(field.columns) }))
     };
     if (nodo.requiresForm && !nodo.formDefinition) {
       this.loadNodoFormDefinition(nodoId);
@@ -1477,6 +1582,13 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     const typed = nodo as Nodo;
     return {
       ...typed,
+      formDefinition: typed.formDefinition ? {
+        ...typed.formDefinition,
+        fields: [...(typed.formDefinition.fields ?? [])].map(field => ({
+          ...field,
+          columns: this.normalizeGridColumns(field.columns)
+        }))
+      } : typed.formDefinition,
       responsibleDepartmentName: typed.responsibleDepartmentName || this.departments().find(item => item.id === typed.responsibleDepartmentId)?.name,
       requiresForm: typed.requiresForm ?? false,
       avgMinutes: typed.avgMinutes ?? 1440
@@ -1499,7 +1611,9 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
             ...this.nodoForm,
             requiresForm: true,
             formTitle: formDefinition.title || 'Formulario',
-            formFields: [...(formDefinition.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).map(field => ({ ...field }))
+            formFields: [...(formDefinition.fields ?? [])]
+              .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+              .map(field => ({ ...field, columns: this.normalizeGridColumns(field.columns) }))
           };
         }
       },
@@ -1556,12 +1670,10 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
 
   private resolveTransitionFields(transition: Transition, visited = new Set<string>()): ResolvedNodoField[] {
     const sourceFields: ResolvedNodoField[] = this.resolveFieldsAvailableAtNodo(transition.fromNodoId, visited);
-    const mode = transition.forwardConfig?.mode || 'none';
-    const selectedNames = new Set(transition.forwardConfig?.fieldNames ?? []);
-    return sourceFields.filter((field: ResolvedNodoField) => {
-      if (mode === 'none') return false;
-      if (mode === 'selected') return selectedNames.has(field.name);
-      return false;
+    return this.filterForwardFields(sourceFields, {
+      mode: this.normalizeForwardMode(transition.forwardConfig?.mode),
+      fieldNames: [...(transition.forwardConfig?.fieldNames ?? [])],
+      includeFiles: Boolean(transition.forwardConfig?.includeFiles)
     });
   }
 
@@ -1620,6 +1732,30 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     return `field-${Math.random().toString(36).slice(2, 10)}`;
   }
 
+  private createGridColumn(order: number): GridColumn {
+    return {
+      id: this.createFieldId(),
+      name: `columna_${order}`,
+      type: 'TEXT',
+      order
+    };
+  }
+
+  private normalizeGridColumns(columns?: Array<Partial<GridColumn>> | null): GridColumn[] {
+    return [...(columns ?? [])]
+      .filter(column => !!column)
+      .map((column, index) => ({
+        id: column.id || this.createFieldId(),
+        name: column.name || `columna_${index + 1}`,
+        type: this.normalizeGridColumnType(column.type),
+        order: index + 1
+      }));
+  }
+
+  private normalizeGridColumnType(type: string | undefined): GridColumnType {
+    return this.gridColumnTypes.includes(type as GridColumnType) ? type as GridColumnType : 'TEXT';
+  }
+
   private emptyNodoForm(): NodoForm {
     return {
       name: '',
@@ -1640,7 +1776,27 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   private emptyTransitionForm(): TransitionForm {
       return {
         mode: 'none',
-        fieldNames: []
+        fieldNames: [],
+        includeFiles: false
       };
     }
+
+  private filterForwardFields(fields: ResolvedNodoField[], config: TransitionForm): ResolvedNodoField[] {
+    const selectedNames = new Set(config.fieldNames);
+    return fields.filter(field => {
+      const isFileField = field.type === 'FILE';
+      if (config.mode === 'none') return false;
+      if (config.mode === 'files-only') return isFileField;
+      if (config.mode === 'all') return config.includeFiles || !isFileField;
+      if (config.mode === 'selected') return selectedNames.has(field.name) || (config.includeFiles && isFileField);
+      return false;
+    });
+  }
+
+  private normalizeForwardMode(mode: string | undefined): ForwardMode {
+    if (mode === 'selected' || mode === 'all' || mode === 'files-only') {
+      return mode;
+    }
+    return 'none';
+  }
 }

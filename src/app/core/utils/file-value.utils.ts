@@ -19,5 +19,13 @@ export function openStoredFileDownload(value: unknown): void {
   if (!isStoredFileValue(value)) return;
   const path = value.downloadPath || `/files/${value.storedName}/download`;
   const separator = path.includes('?') ? '&' : '?';
-  window.open(`${environment.apiUrl}${path}${separator}filename=${encodeURIComponent(storedFileLabel(value))}`, '_blank');
+  const url = `${environment.apiUrl}${path}${separator}filename=${encodeURIComponent(storedFileLabel(value))}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = storedFileLabel(value);
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }

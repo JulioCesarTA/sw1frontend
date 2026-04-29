@@ -3,6 +3,7 @@ import { Component, computed, inject, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { MatButtonModule } from "@angular/material/button";
 import { MatCardModule } from "@angular/material/card";
+import { MatCheckboxModule } from "@angular/material/checkbox";
 import { MatFormFieldModule } from "@angular/material/form-field";
 import { MatIconModule } from "@angular/material/icon";
 import { MatInputModule } from "@angular/material/input";
@@ -13,10 +14,11 @@ import { isStoredFileValue, openStoredFileDownload, storedFileLabel } from "../.
 
 interface ActivitySummary { id: string; code: string; title: string; status: string; workflowName: string; currentNodoName: string; }
 interface ActivityTransition { id: string; name?: string; label?: string; resultadoRama?: string; }
-interface ActivityFormField { id: string; name: string; type: string; order?: number; }
+interface GridColumn { id: string; name: string; type: string; order?: number; }
+interface ActivityFormField { id: string; name: string; type: string; columns?: GridColumn[]; order?: number; }
 interface ActivityForm { id: string; title: string; fields: ActivityFormField[]; }
 interface UploadedFile { fileName: string; storedName: string; downloadPath?: string; }
-interface IncomingField { name: string; value: unknown; }
+interface IncomingField { name: string; type?: string; columns?: GridColumn[]; value: unknown; }
 interface IncomingBlock { transitionId: string; transitionName?: string; fromNodoName: string; fields: IncomingField[]; }
 interface ActivityDetail { id: string; code: string; workflowName: string; currentNodoId: string; currentNodoName: string; formData?: Record<string, unknown>; formDefinition?: ActivityForm; availableTransitions: ActivityTransition[]; incomingData: IncomingBlock[]; }
 interface VoiceFillResponse { transcript: string; formData: Record<string, unknown>; appliedFields: Array<{ field: string; value: unknown }>; warnings: string[]; }
@@ -31,7 +33,7 @@ declare global {
 @Component({
   selector: "app-activities",
   standalone: true,
-  imports: [CommonModule, FormsModule, MatButtonModule, MatCardModule, MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatCardModule, MatCheckboxModule, MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule, MatSnackBarModule],
   template: `
     <div class="mx-auto max-w-[1400px] p-6">
       <div class="mb-5">
@@ -91,8 +93,35 @@ declare global {
                         <div class="mb-2">
                           <label class="mb-1 block text-xs text-slate-500">{{ field.name }}</label>
                           <div class="rounded-[10px] border border-slate-200 bg-white p-2.5 text-[13px] text-slate-900">
-                            @if (isUploadedFile(field.value)) {
+                            @if (field.type === 'GRID' && incomingGridColumns(field).length) {
+                              <div class="overflow-x-auto">
+                                <table class="min-w-full text-xs">
+                                  <thead class="bg-slate-50 text-left uppercase tracking-wide text-slate-500">
+                                    <tr>
+                                      @for (column of incomingGridColumns(field); track column.id) {
+                                        <th class="px-2 py-2">{{ column.name }}</th>
+                                      }
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    @for (row of incomingGridRows(field); track rowIndex; let rowIndex = $index) {
+                                      <tr class="border-t border-slate-100">
+                                        @for (column of incomingGridColumns(field); track column.id) {
+                                          <td class="px-2 py-2">{{ row[column.name] ?? '' }}</td>
+                                        }
+                                      </tr>
+                                    } @empty {
+                                      <tr>
+                                        <td class="px-2 py-3 text-center text-slate-400" [attr.colspan]="incomingGridColumns(field).length">Sin filas</td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </div>
+                            } @else if (isUploadedFile(field.value)) {
                               <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(field.value)">{{ uploadedFileName(field.value) }}</button>
+                            } @else if (field.type === 'CHECKBOX') {
+                              {{ toBoolean(field.value) ? 'Si' : 'No' }}
                             } @else {
                               {{ field.value }}
                             }
@@ -101,6 +130,21 @@ declare global {
                       }
                     </div>
                   }
+                </section>
+              }
+
+              @if (tramiteFiles().length) {
+                <section class="mb-[18px]">
+                  <h4 class="mb-3 text-[15px] font-semibold text-slate-800">Archivos del trámite</h4>
+                  <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    @for (file of tramiteFiles(); track file.name) {
+                      <div class="flex items-center gap-2 py-1">
+                        <mat-icon class="!h-4 !w-4 !text-base text-slate-400">attach_file</mat-icon>
+                        <span class="text-xs text-slate-500">{{ file.name }}:</span>
+                        <button type="button" class="cursor-pointer border-none bg-transparent p-0 text-xs text-indigo-600 underline" (click)="downloadFile(file.value)">{{ uploadedFileName(file.value) }}</button>
+                      </div>
+                    }
+                  </div>
                 </section>
               }
 
@@ -113,12 +157,6 @@ declare global {
                       {{ voiceListening() ? 'Detener voz' : 'Llenar por voz' }}
                     </button>
                   </div>
-                  @if (voiceTranscript()) {
-                    <div class="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-[13px] text-sky-900">
-                      <div class="mb-1 font-semibold">Texto reconocido</div>
-                      <div>{{ voiceTranscript() }}</div>
-                    </div>
-                  }
                   @for (field of formFields(); track field.id) {
                     @if (field.type === "FILE") {
                       <div class="mb-4 flex flex-col gap-2">
@@ -133,6 +171,63 @@ declare global {
                             }
                           </div>
                         }
+                      </div>
+                    } @else if (field.type === "GRID") {
+                      <div class="mb-4">
+                        <div class="mb-2 flex items-center justify-between gap-3">
+                          <label class="text-[13px] font-medium text-slate-700">{{ field.name }}</label>
+                          <button mat-stroked-button type="button" (click)="addGridRow(field)">Agregar fila</button>
+                        </div>
+                        @if (gridColumns(field).length) {
+                          <div class="overflow-x-auto rounded-xl border border-slate-200">
+                            <table class="min-w-full text-sm">
+                              <thead class="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                <tr>
+                                  @for (column of gridColumns(field); track column.id) {
+                                    <th class="px-3 py-2">{{ column.name }}</th>
+                                  }
+                                  <th class="w-[90px] px-3 py-2"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                @for (row of gridRows(field); track rowIndex; let rowIndex = $index) {
+                                  <tr class="border-t border-slate-100">
+                                    @for (column of gridColumns(field); track column.id) {
+                                      <td class="px-3 py-2">
+                                        @if (column.type === 'CHECKBOX') {
+                                          <mat-checkbox [ngModel]="toBoolean(row[column.name])" (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)"></mat-checkbox>
+                                        } @else {
+                                          <input
+                                            class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                                            [type]="inputType(column.type)"
+                                            [ngModel]="row[column.name] ?? ''"
+                                            (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)" />
+                                        }
+                                      </td>
+                                    }
+                                    <td class="px-3 py-2 text-right">
+                                      <button mat-button color="warn" type="button" (click)="removeGridRow(field, rowIndex)">Quitar</button>
+                                    </td>
+                                  </tr>
+                                } @empty {
+                                  <tr>
+                                    <td class="px-3 py-4 text-center text-sm text-slate-400" [attr.colspan]="gridColumns(field).length + 1">Sin filas</td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          </div>
+                        } @else {
+                          <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                            Esta grilla no tiene columnas configuradas.
+                          </div>
+                        }
+                      </div>
+                    } @else if (field.type === "CHECKBOX") {
+                      <div class="mb-4 rounded-xl border border-slate-200 px-3 py-2">
+                        <mat-checkbox [ngModel]="toBoolean(fieldValue(field))" (ngModelChange)="setFieldValue(field, $event)">
+                          {{ field.name }}
+                        </mat-checkbox>
                       </div>
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
@@ -189,6 +284,20 @@ export class ActivitiesComponent implements OnInit {
   formFields = computed(() => [...(this.formularioActual()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0)));
   formTitle = computed(() => this.formularioActual()?.title || this.selectedActivity()?.formDefinition?.title || "Formulario");
   visibleTransitions = computed(() => this.selectedActivity()?.availableTransitions ?? []);
+  tramiteFiles = computed(() => {
+    const formFieldNames = new Set(this.formFields().map(f => f.name));
+    const incomingFieldNames = new Set(
+      (this.selectedActivity()?.incomingData ?? [])
+        .flatMap(block => block.fields.map(field => field.name))
+    );
+    return Object.entries(this.fieldValues())
+      .filter(([name, value]) =>
+        isStoredFileValue(value)
+        && !formFieldNames.has(name)
+        && !incomingFieldNames.has(name)
+      )
+      .map(([name, value]) => ({ name, value }));
+  });
 
   ngOnInit() { this.loadActivities(); }
 
@@ -266,6 +375,42 @@ export class ActivitiesComponent implements OnInit {
   fieldValue(field: ActivityFormField) { return this.fieldValues()[field.name] ?? ""; }
   setFieldValue(field: ActivityFormField, value: unknown) { this.fieldValues.update((current) => ({ ...current, [field.name]: value })); }
   inputType(type: string) { return type === "DATE" ? "date" : type === "NUMBER" ? "number" : type === "EMAIL" ? "email" : "text"; }
+  toBoolean(value: unknown) { return value === true; }
+  gridColumns(field: ActivityFormField) {
+    return [...(field.columns ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0));
+  }
+  gridRows(field: ActivityFormField) {
+    const value = this.fieldValues()[field.name];
+    return Array.isArray(value) ? value.filter((row): row is Record<string, unknown> => !!row && typeof row === "object" && !Array.isArray(row)) : [];
+  }
+  addGridRow(field: ActivityFormField) {
+    const columns = this.gridColumns(field);
+    if (!columns.length) {
+      this.snackBar.open("La grilla no tiene columnas configuradas", "", { duration: 2500 });
+      return;
+    }
+    const nextRow = Object.fromEntries(columns.map((column) => [column.name, ""]));
+    this.setFieldValue(field, [...this.gridRows(field), nextRow]);
+  }
+  removeGridRow(field: ActivityFormField, rowIndex: number) {
+    this.setFieldValue(field, this.gridRows(field).filter((_, index) => index !== rowIndex));
+  }
+  setGridCellValue(field: ActivityFormField, rowIndex: number, column: GridColumn, value: unknown) {
+    const rows = this.gridRows(field).map((row) => ({ ...row }));
+    if (!rows[rowIndex]) {
+      rows[rowIndex] = {};
+    }
+    rows[rowIndex] = { ...rows[rowIndex], [column.name]: value };
+    this.setFieldValue(field, rows);
+  }
+  incomingGridColumns(field: IncomingField) {
+    return [...(field.columns ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0));
+  }
+  incomingGridRows(field: IncomingField) {
+    return Array.isArray(field.value)
+      ? field.value.filter((row): row is Record<string, unknown> => !!row && typeof row === "object" && !Array.isArray(row))
+      : [];
+  }
   isUploadedFile(value: unknown): value is UploadedFile { return isStoredFileValue(value); }
   uploadedFileName(value: unknown) { return storedFileLabel(value); }
 
@@ -283,7 +428,10 @@ export class ActivitiesComponent implements OnInit {
     const body = new FormData();
     body.append("file", file);
     this.api.post<UploadedFile>("/files/upload", body).subscribe({
-      next: (uploaded) => this.setFieldValue(field, uploaded),
+      next: (uploaded) => {
+        this.setFieldValue(field, uploaded);
+        this.snackBar.open(`Archivo "${uploaded.fileName || file.name}" subido`, "", { duration: 3000 });
+      },
       error: () => this.snackBar.open("Error al subir archivo", "", { duration: 3000 }),
     });
   }
@@ -345,7 +493,7 @@ export class ActivitiesComponent implements OnInit {
 
   private applyVoiceTranscript(activityId: string, transcript: string) {
     this.voiceLoading.set(true);
-    this.api.post<VoiceFillResponse>(`/activities/${activityId}/voice-fill`, { transcript }).subscribe({
+    this.api.post<VoiceFillResponse>(`/activities/${activityId}/voice-fill`, { transcript, formData: this.fieldValues() }).subscribe({
       next: (response) => {
         this.fieldValues.set({ ...response.formData });
         const applied = response.appliedFields?.length ?? 0;

@@ -8,12 +8,20 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 
 type NodeType = 'inicio' | 'proceso' | 'decision' | 'bifurcasion' | 'union' | 'fin' | 'iteracion';
-type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'EMAIL';
+type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'EMAIL' | 'CHECKBOX' | 'GRID';
 type SidebarTab = 'inspector' | 'diagram-ai' | 'worky' | 'bottleneck';
 
+interface GridColumn {
+  id: string;
+  name: string;
+  type: Exclude<FieldType, 'FILE' | 'GRID'>;
+  order: number;
+}
+
 interface ForwardConfig {
-  mode?: 'selected' | 'none';
+  mode?: 'selected' | 'none' | 'all' | 'files-only';
   fieldNames?: string[];
+  includeFiles?: boolean;
 }
 
 interface Nodo {
@@ -39,6 +47,7 @@ interface Nodo {
       id: string;
       name: string;
       type: FieldType;
+      columns?: GridColumn[];
       options?: string[];
       isRequired?: boolean;
       order: number;
@@ -95,6 +104,12 @@ interface DiagramAiAction {
       id?: string;
       name?: string;
       type?: FieldType;
+      columns?: Array<{
+        id?: string;
+        name?: string;
+        type?: Exclude<FieldType, 'FILE' | 'GRID'>;
+        order?: number;
+      }>;
       required?: boolean;
       order?: number;
     }>;
@@ -127,15 +142,54 @@ interface WorkyResult {
 
 interface BottleneckItem {
   nodoName?: string;
+  nodoId?: string;
+  type?: string;
   severity?: string;
   reason?: string;
   recommendation?: string;
+  TiempoEsperaMinutes?: number;
+  TiempoPromedioActividadEnNodoMinutes?: number;
+  activeCount?: number;
+  completedSamples?: number;
+  avgMinutesTarget?: number;
+}
+
+interface BottleneckKpi {
+  id: string;
+  label: string;
+  averageMinutes: number;
+  displayValue: string;
+  sampleSize: number;
+  formula: string;
+  sourceFields: string[];
+  description?: string;
+}
+
+interface BottleneckNodeMetric {
+  nodoId: string;
+  nodoName: string;
+  avgMinutesTarget: number;
+  activeCount: number;
+  completedSamples: number;
+  TiempoEsperaMinutes: number;
+  TiempoEsperaDisplay: string;
+  TiempoPromedioActividadEnNodoMinutes: number;
+  TiempoPromedioActividadEnNodoDisplay: string;
 }
 
 interface BottleneckResult {
   summary?: string;
+  kpis?: BottleneckKpi[];
+  nodeMetrics?: BottleneckNodeMetric[];
   bottlenecks: BottleneckItem[];
   parallelizationOpportunities: string[];
+}
+
+declare global {
+  interface Window {
+    SpeechRecognition?: new () => any;
+    webkitSpeechRecognition?: new () => any;
+  }
 }
 
 @Component({
@@ -151,8 +205,21 @@ interface BottleneckResult {
           rows="6"
           class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
           placeholder="Ejemplo: elimina el nodo Revision, crea un proceso Aprobacion final y conectalo con Fin"></textarea>
-        <div class="flex justify-end">
-          <button mat-flat-button color="primary" [disabled]="diagramBusy() || !diagramPrompt.trim()" (click)="runDiagramCommand()">
+        @if (diagramVoiceTranscript()) {
+          <div class="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+            {{ diagramVoiceTranscript() }}
+          </div>
+        }
+        <div class="flex justify-end gap-2">
+          <button mat-stroked-button type="button" [disabled]="diagramBusy() || diagramVoiceProcessing()" (click)="toggleDiagramVoiceCapture()">
+            @if (diagramVoiceListening()) {
+              <mat-spinner diameter="18" />
+            } @else {
+              <mat-icon>mic</mat-icon>
+            }
+            {{ diagramVoiceListening() ? 'Detener grabacion' : 'Hablar' }}
+          </button>
+          <button mat-flat-button color="primary" [disabled]="diagramBusy() || diagramVoiceListening() || !diagramPrompt.trim()" (click)="runDiagramCommand()">
             @if (diagramBusy()) {
               <mat-spinner diameter="18" />
             } @else {
@@ -180,16 +247,11 @@ interface BottleneckResult {
       </div>
     } @else if (activeTab === 'worky') {
       <div class="space-y-4">
-        <div class="flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3">
           <h3 class="m-0 text-lg text-slate-950">Worky</h3>
-          <button mat-stroked-button [disabled]="workyLoading() || !workflowId" (click)="refreshWorkySuggestions()">
-            @if (workyLoading()) {
-              <mat-spinner diameter="18" />
-            } @else {
-              <mat-icon>refresh</mat-icon>
-            }
-            Actualizar
-          </button>
+          @if (workyLoading()) {
+            <mat-spinner diameter="18" />
+          }
         </div>
 
         @if (!workflowId) {
@@ -287,26 +349,51 @@ interface BottleneckResult {
           </div>
         } @else if (bottleneckResult()) {
           <div class="grid gap-3">
-            @if (bottleneckResult()?.summary) {
-              <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-                {{ bottleneckResult()?.summary }}
-              </div>
-            }
-            @for (item of bottleneckResult()?.bottlenecks || []; track $index) {
-              <div class="rounded-2xl border border-slate-200 bg-white p-4">
-                <div class="text-sm font-semibold text-slate-900">{{ item.nodoName || 'Etapa' }}</div>
-                <div class="mt-1 text-sm text-slate-600">{{ item.reason }}</div>
-                @if (item.recommendation) {
-                  <div class="mt-2 text-sm text-indigo-700">{{ item.recommendation }}</div>
-                }
-              </div>
-            }
-            @if (bottleneckResult()?.parallelizationOpportunities?.length) {
-              <div class="rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-                <div class="mb-2 text-sm font-semibold text-slate-900">Oportunidades de paralelizacion</div>
+            @if (groupedRoleMetrics().length) {
+              <div>
+                <div class="mb-2 text-sm font-semibold text-slate-900">Metricas por departamento / rol</div>
                 <div class="grid gap-2">
-                  @for (opportunity of bottleneckResult()?.parallelizationOpportunities || []; track $index) {
-                    <div class="text-sm text-slate-700">{{ opportunity }}</div>
+                  @for (grp of groupedRoleMetrics(); track grp.key) {
+                    <div class="rounded-xl border border-slate-200 bg-white p-3">
+                      <div class="mb-2">
+                        <div class="text-sm font-semibold text-slate-900">{{ grp.roleName || 'Sin rol' }}</div>
+                        @if (grp.deptName) {
+                          <div class="mt-0.5 text-[11px] text-slate-500">{{ grp.deptName }}</div>
+                        }
+                      </div>
+                      <div class="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                        <div>
+                          <div class="text-[10px] uppercase tracking-wide text-slate-400">Espera promedio</div>
+                          <div class="text-sm font-semibold text-slate-900">{{ formatMinutes(grp.avgEspera) }}</div>
+                        </div>
+                        <div>
+                          <div class="text-[10px] uppercase tracking-wide text-slate-400">En nodo promedio</div>
+                          <div class="text-sm font-semibold text-slate-900">{{ formatMinutes(grp.avgEnNodo) }}</div>
+                        </div>
+                        <div>
+                          <div class="text-[10px] uppercase tracking-wide text-slate-400">Activas</div>
+                          <div class="text-sm font-semibold text-slate-900">{{ grp.totalActivas }}</div>
+                        </div>
+                        <div>
+                          <div class="text-[10px] uppercase tracking-wide text-slate-400">Muestras</div>
+                          <div class="text-sm font-semibold text-slate-900">{{ grp.totalMuestras }}</div>
+                        </div>
+                      </div>
+                      <div class="mt-1.5 text-[11px] text-slate-400">meta: {{ formatMinutes(grp.avgTarget) }}</div>
+                    </div>
+                  }
+                </div>
+              </div>
+            }
+            @if (bottleneckSuggestions().length) {
+              <div class="rounded-2xl border border-violet-200 bg-violet-50 p-4">
+                <div class="mb-2.5 text-sm font-semibold text-violet-900">Sugerencias</div>
+                <div class="grid gap-2">
+                  @for (s of bottleneckSuggestions(); track $index) {
+                    <div class="flex gap-2 text-sm text-violet-800">
+                      <span class="mt-0.5 shrink-0 text-violet-400">›</span>
+                      <span>{{ s }}</span>
+                    </div>
                   }
                 </div>
               </div>
@@ -342,10 +429,16 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   workyChat = signal<AiChatMessage[]>([]);
   bottleneckLoading = signal(false);
   bottleneckResult = signal<BottleneckResult | null>(null);
+  diagramVoiceListening = signal(false);
+  diagramVoiceProcessing = signal(false);
+  diagramVoiceTranscript = signal('');
   diagramPrompt = '';
   workyPrompt = '';
   private aiHistory: AiChatMessage[] = [];
   private workyHistory: AiChatMessage[] = [];
+  private speechRecognition: any = null;
+  private shouldExecuteVoiceCommand = false;
+  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnChanges(changes: SimpleChanges) {
     if (this.activeTab === 'worky' && (changes['activeTab'] || changes['nodo'] || changes['transitions'] || changes['departments'] || changes['jobRoles'])) {
@@ -354,6 +447,7 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   }
 
   ngOnDestroy() {
+    this.stopDiagramVoiceCapture();
     if (this.workyRefreshTimer) {
       clearTimeout(this.workyRefreshTimer);
     }
@@ -362,9 +456,13 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   async runDiagramCommand() {
     const command = this.diagramPrompt.trim();
     if (!command || this.diagramBusy()) return;
+    await this.executeDiagramCommand(command, '/workflow-ai/diagramaporcomand');
+  }
+
+  private async executeDiagramCommand(command: string, endpoint: string) {
     this.diagramBusy.set(true);
     try {
-      const result = await firstValueFrom(this.api.post<DiagramAiResult>('/workflow-ai/diagramaporcomand', {
+      const result = await firstValueFrom(this.api.post<DiagramAiResult>(endpoint, {
         ...this.aiContextPayload(),
         command,
         history: this.aiHistory
@@ -444,6 +542,54 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
     }
   }
 
+  groupedRoleMetrics() {
+    const metrics = this.bottleneckResult()?.nodeMetrics ?? [];
+    const map = new Map<string, {
+      key: string; deptName: string; roleName: string;
+      esperas: number[]; enNodos: number[]; totalActivas: number; totalMuestras: number; targets: number[];
+    }>();
+    for (const metric of metrics) {
+      const n = this.nodo.find(item => item.id === metric.nodoId);
+      if (!n) continue;
+      const dept = n.responsibleDepartmentName || this.departments.find(d => d.id === n.responsibleDepartmentId)?.name || '';
+      const role = this.jobRoles.find(r => r.id === n.responsibleJobRoleId)?.name || '';
+      if (!dept && !role) continue;
+      const key = `${dept}::${role}`;
+      if (!map.has(key)) map.set(key, { key, deptName: dept, roleName: role, esperas: [], enNodos: [], totalActivas: 0, totalMuestras: 0, targets: [] });
+      const g = map.get(key)!;
+      g.esperas.push(metric.TiempoEsperaMinutes);
+      g.enNodos.push(metric.TiempoPromedioActividadEnNodoMinutes);
+      g.totalActivas += metric.activeCount;
+      g.totalMuestras += metric.completedSamples;
+      g.targets.push(metric.avgMinutesTarget);
+    }
+    const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
+    return [...map.values()].map(g => ({
+      key: g.key, deptName: g.deptName, roleName: g.roleName,
+      avgEspera: avg(g.esperas), avgEnNodo: avg(g.enNodos),
+      totalActivas: g.totalActivas, totalMuestras: g.totalMuestras,
+      avgTarget: avg(g.targets)
+    }));
+  }
+
+  nodoMeta(nodoId: string): { dept: string; role: string } | null {
+    const n = this.nodo.find(item => item.id === nodoId);
+    if (!n) return null;
+    const dept = n.responsibleDepartmentName || this.departments.find(d => d.id === n.responsibleDepartmentId)?.name || '';
+    const role = this.jobRoles.find(r => r.id === n.responsibleJobRoleId)?.name || '';
+    return (dept || role) ? { dept, role } : null;
+  }
+
+  bottleneckSuggestions(): string[] {
+    const result = this.bottleneckResult();
+    if (!result) return [];
+    const fromBottlenecks = (result.bottlenecks ?? [])
+      .map(b => b.recommendation)
+      .filter((r): r is string => !!r);
+    const fromParallelization = result.parallelizationOpportunities ?? [];
+    return [...fromBottlenecks, ...fromParallelization];
+  }
+
   describeAiAction(action: DiagramAiAction) {
     switch (action.type) {
       case 'create_department': return `Crear departamento ${action.name || 'nuevo'}`;
@@ -455,6 +601,66 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
       case 'disconnect_nodo': return `Eliminar conexion ${action.transitionId || ''}`;
       default: return 'Mostrar diagrama';
     }
+  }
+
+  toggleDiagramVoiceCapture() {
+    if (this.diagramVoiceListening()) {
+      this.stopDiagramVoiceCapture(true);
+      return;
+    }
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      this.handleError('Tu navegador no soporta reconocimiento de voz');
+      return;
+    }
+    this.shouldExecuteVoiceCommand = false;
+    this.speechRecognition = new SpeechRecognitionCtor();
+    this.speechRecognition.lang = 'es-ES';
+    this.speechRecognition.continuous = true;
+    this.speechRecognition.interimResults = true;
+    this.speechRecognition.onstart = () => {
+      this.diagramVoiceListening.set(true);
+      this.diagramVoiceTranscript.set('');
+      this.clearSilenceTimer();
+    };
+    this.speechRecognition.onerror = () => {
+      this.diagramVoiceListening.set(false);
+      this.diagramVoiceProcessing.set(false);
+      this.shouldExecuteVoiceCommand = false;
+      this.clearSilenceTimer();
+      this.handleError('No se pudo capturar la voz');
+    };
+    this.speechRecognition.onend = async () => {
+      this.clearSilenceTimer();
+      this.diagramVoiceListening.set(false);
+      const shouldExecute = this.shouldExecuteVoiceCommand;
+      this.shouldExecuteVoiceCommand = false;
+      if (!shouldExecute) {
+        return;
+      }
+      const transcript = this.diagramVoiceTranscript().trim();
+      if (!transcript) {
+        this.diagramVoiceProcessing.set(false);
+        this.handleError('No se detecto ningun comando de voz');
+        return;
+      }
+      this.diagramPrompt = transcript;
+      try {
+        await this.executeDiagramCommand(transcript, '/workflow-ai/diagramaporvoz');
+      } finally {
+        this.diagramVoiceProcessing.set(false);
+      }
+    };
+    this.speechRecognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results ?? [])
+        .map((result: any) => result?.[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      this.diagramVoiceTranscript.set(transcript);
+      this.restartSilenceTimer();
+    };
+    this.speechRecognition.start();
   }
 
   private queueWorkyRefresh() {
@@ -494,5 +700,46 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
 
   private handleError(message: string) {
     this.onError?.(message);
+  }
+
+  private stopDiagramVoiceCapture(executeCommand = false) {
+    this.shouldExecuteVoiceCommand = executeCommand;
+    if (executeCommand) {
+      this.diagramVoiceProcessing.set(true);
+    }
+    this.clearSilenceTimer();
+    if (this.speechRecognition) {
+      this.speechRecognition.stop();
+      this.speechRecognition = null;
+      return;
+    }
+    this.diagramVoiceListening.set(false);
+    if (executeCommand) {
+      this.diagramVoiceProcessing.set(false);
+    }
+  }
+
+  private restartSilenceTimer() {
+    this.clearSilenceTimer();
+    this.silenceTimer = setTimeout(() => {
+      if (this.diagramVoiceListening()) {
+        this.stopDiagramVoiceCapture(true);
+      }
+    }, 4000);
+  }
+
+  private clearSilenceTimer() {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+  }
+
+  formatMinutes(value: number | null | undefined) {
+    const minutes = Number(value ?? 0);
+    if (!minutes || minutes <= 0) return '0 min';
+    if (minutes >= 1440) return `${Math.round((minutes / 1440) * 100) / 100} d`;
+    if (minutes >= 60) return `${Math.round((minutes / 60) * 100) / 100} h`;
+    return `${Math.round(minutes * 100) / 100} min`;
   }
 }

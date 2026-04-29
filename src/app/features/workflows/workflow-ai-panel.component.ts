@@ -128,6 +128,30 @@ interface DiagramAiResult {
   actions: DiagramAiAction[];
 }
 
+interface FormVoiceDesignResult {
+  targetNodoId: string;
+  requiresForm: boolean;
+  formDefinition?: {
+    title?: string;
+    fields?: Array<{
+      id?: string;
+      name?: string;
+      type?: FieldType;
+      columns?: Array<{
+        id?: string;
+        name?: string;
+        type?: Exclude<FieldType, 'FILE' | 'GRID'>;
+        order?: number;
+      }>;
+      isRequired?: boolean;
+      required?: boolean;
+      order?: number;
+    }>;
+  } | null;
+  changes?: string;
+  warnings?: string[];
+}
+
 interface WorkySuggestion {
   title: string;
   reason: string;
@@ -416,7 +440,9 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   @Input() transitions: Transition[] = [];
   @Input() departments: Department[] = [];
   @Input() jobRoles: JobRole[] = [];
+  @Input() selectedNodo: Nodo | null = null;
   @Input({ required: true }) applyAiActions!: (actions: DiagramAiAction[]) => Promise<void>;
+  @Input() applyVoiceFormPatch?: (result: FormVoiceDesignResult) => Promise<void>;
   @Input() onError?: (message: string) => void;
 
   private api = inject(ApiService);
@@ -456,7 +482,15 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   async runDiagramCommand() {
     const command = this.diagramPrompt.trim();
     if (!command || this.diagramBusy()) return;
-    await this.executeDiagramCommand(command, '/workflow-ai/diagramaporcomand');
+    await this.executeAiCommand(command, false);
+  }
+
+  private async executeAiCommand(command: string, fromVoice: boolean) {
+    if (this.looksLikeFormCommand(command)) {
+      await this.executeFormVoiceCommand(command);
+      return;
+    }
+    await this.executeDiagramCommand(command, fromVoice ? '/workflow-ai/diagramaporvoz' : '/workflow-ai/diagramaporcomand');
   }
 
   private async executeDiagramCommand(command: string, endpoint: string) {
@@ -480,6 +514,42 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
       this.diagramPrompt = '';
     } catch (err: any) {
       this.handleError(err?.error?.message || err?.message || 'No se pudo ejecutar la IA del diagrama');
+    } finally {
+      this.diagramBusy.set(false);
+    }
+  }
+
+  private async executeFormVoiceCommand(command: string) {
+    if (!this.applyVoiceFormPatch) {
+      this.handleError('No hay manejador para aplicar cambios de formulario');
+      return;
+    }
+    this.diagramBusy.set(true);
+    try {
+      const result = await firstValueFrom(this.api.post<FormVoiceDesignResult>('/workflow-ai/formularioporvoz', {
+        ...this.aiContextPayload(),
+        transcript: command,
+        selectedNodo: this.selectedNodo
+      }));
+      if (result.warnings?.length && !result.targetNodoId) {
+        this.diagramResult.set({
+          interpretation: 'No se aplicaron cambios al formulario',
+          changes: result.warnings.join(' | '),
+          actions: []
+        });
+        return;
+      }
+      await this.applyVoiceFormPatch(result);
+      const warnings = result.warnings?.length ? ` Advertencias: ${result.warnings.join(' | ')}` : '';
+      this.diagramResult.set({
+        interpretation: `Formulario actualizado en ${this.resolveNodoName(result.targetNodoId)}`,
+        changes: `${result.changes || 'Cambios aplicados al formulario.'}${warnings}`,
+        actions: []
+      });
+      this.queueWorkyRefresh();
+      this.diagramPrompt = '';
+    } catch (err: any) {
+      this.handleError(err?.error?.message || err?.message || 'No se pudo editar el formulario por voz');
     } finally {
       this.diagramBusy.set(false);
     }
@@ -646,7 +716,7 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
       }
       this.diagramPrompt = transcript;
       try {
-        await this.executeDiagramCommand(transcript, '/workflow-ai/diagramaporvoz');
+        await this.executeAiCommand(transcript, true);
       } finally {
         this.diagramVoiceProcessing.set(false);
       }
@@ -694,8 +764,18 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
       nodo: this.nodo,
       transitions: this.transitions,
       departments: this.departments,
-      jobRoles: this.jobRoles
+      jobRoles: this.jobRoles,
+      selectedNodo: this.selectedNodo
     };
+  }
+
+  private looksLikeFormCommand(command: string) {
+    const normalized = command.trim().toLowerCase();
+    return /formulario|campo|grilla|grid|checkbox|check|obligatorio|required|requerido|columna|titulo del formulario|título del formulario/.test(normalized);
+  }
+
+  private resolveNodoName(nodoId: string) {
+    return this.nodo.find(item => item.id === nodoId)?.name || nodoId || 'nodo';
   }
 
   private handleError(message: string) {

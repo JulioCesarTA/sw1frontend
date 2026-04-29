@@ -186,6 +186,30 @@ interface DiagramAiAction {
   forwardConfig?: ForwardConfig;
 }
 
+interface FormVoiceDesignResult {
+  targetNodoId: string;
+  requiresForm: boolean;
+  formDefinition?: {
+    title?: string;
+    fields?: Array<{
+      id?: string;
+      name?: string;
+      type?: FieldType;
+      columns?: Array<{
+        id?: string;
+        name?: string;
+        type?: GridColumnType;
+        order?: number;
+      }>;
+      isRequired?: boolean;
+      required?: boolean;
+      order?: number;
+    }>;
+  } | null;
+  changes?: string;
+  warnings?: string[];
+}
+
 @Component({
   selector: 'app-workflow-editor',
   standalone: true,
@@ -639,7 +663,9 @@ interface DiagramAiAction {
                   [transitions]="workflow()?.transitions || []"
                   [departments]="departments()"
                   [jobRoles]="jobRoles()"
+                  [selectedNodo]="selectedNodo()"
                   [applyAiActions]="applyAiActionsBound"
+                  [applyVoiceFormPatch]="applyVoiceFormPatchBound"
                   [onError]="showAiError">
                 </app-workflow-ai-panel>
               } @else {
@@ -690,6 +716,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   connectingFromId = signal<string | null>(null);
   sidebarTab = signal<SidebarTab>('inspector');
   readonly applyAiActionsBound = (actions: DiagramAiAction[]) => this.applyAiActions(actions);
+  readonly applyVoiceFormPatchBound = (result: FormVoiceDesignResult) => this.applyVoiceFormPatch(result);
   readonly showAiError = (message: string) => this.snack.open(message, '', { duration: 3500 });
 
   selectedNodo = computed(() => this.workflow()?.nodo.find(nodo => nodo.id === this.selectedNodoId()) ?? null);
@@ -1132,6 +1159,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   }
 
   private async applyAiActions(actions: DiagramAiAction[]) {
+    this.validateAiActionPlan(actions);
     const placeholderMap = new Map<string, string>();
     let shouldRelayout = false;
     for (const action of actions) {
@@ -1168,6 +1196,181 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
     }
     if (shouldRelayout) {
       await this.autoLayoutWorkflow();
+    }
+  }
+
+  private async applyVoiceFormPatch(result: FormVoiceDesignResult) {
+    const targetNodoId = result.targetNodoId || this.selectedNodoId();
+    if (!targetNodoId) {
+      throw new Error('No se pudo identificar el nodo del formulario');
+    }
+    const nodo = this.workflow()?.nodo.find(item => item.id === targetNodoId);
+    if (!nodo) {
+      throw new Error('El nodo indicado por voz no existe en el workflow actual');
+    }
+    const nodeType = this.tipoNodo(nodo);
+    if (!this.esNodoHumano(nodeType)) {
+      throw new Error('Solo se puede editar el formulario de nodos tipo proceso');
+    }
+    const normalizedFormDefinition = this.normalizeVoiceFormDefinition(result.formDefinition);
+    const saved = await firstValueFrom(this.api.patch<Nodo>(`/workflow-nodos/${targetNodoId}`, {
+      name: nodo.name,
+      description: nodo.description || '',
+      nodeType: nodo.nodeType || 'proceso',
+      responsibleDepartmentId: nodo.responsibleDepartmentId || null,
+      responsibleJobRoleId: nodo.responsibleJobRoleId || null,
+      avgMinutes: Number(nodo.avgMinutes || 1),
+      condition: nodo.condition || '',
+      trueLabel: nodo.trueLabel || 'Si',
+      falseLabel: nodo.falseLabel || 'No',
+      requiresForm: result.requiresForm !== false,
+      formDefinition: normalizedFormDefinition,
+      posX: nodo.posX ?? 0,
+      posY: nodo.posY ?? 0
+    }));
+    this.upsertNodo(saved);
+    if (this.selectedNodoId() === targetNodoId) {
+      this.selectNodo(targetNodoId);
+    }
+  }
+
+  private validateAiActionPlan(actions: DiagramAiAction[]) {
+    const workflow = this.workflow();
+    if (!workflow || !actions.length) return;
+
+    type SimNodo = Pick<Nodo, 'id' | 'name' | 'nodeType'>;
+    type SimTransition = Pick<Transition, 'id' | 'fromNodoId' | 'toNodoId'>;
+
+    const nodos = new Map<string, SimNodo>(
+      workflow.nodo.map(nodo => [nodo.id, { id: nodo.id, name: nodo.name, nodeType: nodo.nodeType }])
+    );
+    const transitions: SimTransition[] = workflow.transitions.map(transition => ({
+      id: transition.id,
+      fromNodoId: transition.fromNodoId,
+      toNodoId: transition.toNodoId
+    }));
+    const placeholderMap = new Map<string, string>();
+    let syntheticTransitionIndex = 0;
+
+    for (const action of actions) {
+      switch (action.type) {
+        case 'create_nodo': {
+          const syntheticId = action.placeholderId || `ai-create-${nodos.size + 1}`;
+          placeholderMap.set(action.placeholderId || syntheticId, syntheticId);
+          nodos.set(syntheticId, {
+            id: syntheticId,
+            name: action.name || syntheticId,
+            nodeType: action.nodeType || 'proceso'
+          });
+          break;
+        }
+        case 'update_nodo': {
+          const nodoId = this.resolveNodoRef(action.nodoId, placeholderMap);
+          if (!nodoId || !nodos.has(nodoId)) {
+            throw new Error(`La IA intento actualizar un nodo inexistente: ${action.nodoId || ''}`);
+          }
+          const current = nodos.get(nodoId)!;
+          nodos.set(nodoId, {
+            ...current,
+            name: action.name ?? current.name,
+            nodeType: action.nodeType ?? current.nodeType
+          });
+          break;
+        }
+        case 'delete_nodo': {
+          const nodoId = this.resolveNodoRef(action.nodoId, placeholderMap);
+          if (!nodoId || !nodos.has(nodoId)) {
+            throw new Error(`La IA intento eliminar un nodo inexistente: ${action.nodoId || ''}`);
+          }
+          nodos.delete(nodoId);
+          for (let i = transitions.length - 1; i >= 0; i--) {
+            if (transitions[i].fromNodoId === nodoId || transitions[i].toNodoId === nodoId) {
+              transitions.splice(i, 1);
+            }
+          }
+          break;
+        }
+        case 'connect_nodo': {
+          const fromNodoId = this.resolveNodoRef(action.fromNodoId, placeholderMap);
+          const toNodoId = this.resolveNodoRef(action.toNodoId, placeholderMap);
+          this.validateAiSimulatedTransition(fromNodoId, toNodoId, nodos, transitions);
+          transitions.push({
+            id: `ai-transition-${++syntheticTransitionIndex}`,
+            fromNodoId,
+            toNodoId
+          });
+          break;
+        }
+        case 'disconnect_nodo': {
+          if (!action.transitionId) {
+            throw new Error('La IA intento eliminar una conexion sin transitionId');
+          }
+          const index = transitions.findIndex(item => item.id === action.transitionId);
+          if (index === -1) {
+            throw new Error(`La IA intento eliminar una conexion inexistente: ${action.transitionId}`);
+          }
+          transitions.splice(index, 1);
+          break;
+        }
+        default:
+          break;
+      }
+    }
+  }
+
+  private validateAiSimulatedTransition(
+    fromNodoId: string,
+    toNodoId: string,
+    nodos: Map<string, Pick<Nodo, 'id' | 'name' | 'nodeType'>>,
+    transitions: Array<Pick<Transition, 'id' | 'fromNodoId' | 'toNodoId'>>
+  ) {
+    if (!fromNodoId || !toNodoId || fromNodoId === toNodoId) {
+      throw new Error('La IA genero una conexion invalida');
+    }
+
+    const from = nodos.get(fromNodoId);
+    const to = nodos.get(toNodoId);
+    if (!from || !to) {
+      throw new Error(`La IA conecto nodos inexistentes: ${fromNodoId} -> ${toNodoId}`);
+    }
+
+    const fromType = this.tipoNodo(from);
+    const toType = this.tipoNodo(to);
+    const outgoing = transitions.filter(transition => transition.fromNodoId === fromNodoId);
+    const incomingToTarget = transitions.filter(transition => transition.toNodoId === toNodoId);
+
+    if (transitions.some(transition => transition.fromNodoId === fromNodoId && transition.toNodoId === toNodoId)) {
+      throw new Error(`La IA repitio una conexion: ${from.name} -> ${to.name}`);
+    }
+    if (toType === 'inicio') {
+      throw new Error(`La IA intento conectar hacia Inicio: ${from.name} -> ${to.name}`);
+    }
+    if (fromType === 'fin') {
+      throw new Error(`La IA intento sacar una conexion desde Fin: ${from.name} -> ${to.name}`);
+    }
+    if (fromType === 'inicio' && toType !== 'proceso') {
+      throw new Error(`La IA intento conectar Inicio hacia un nodo no valido: ${to.name}`);
+    }
+    if (toType === 'fin' && fromType !== 'proceso') {
+      throw new Error(`La IA intento cerrar ${from.name} directamente en Fin, pero solo Proceso puede entrar a Fin`);
+    }
+    if (fromType === 'inicio' && outgoing.length >= 1) {
+      throw new Error('La IA genero mas de una salida desde Inicio');
+    }
+    if ((toType === 'decision' || toType === 'iteracion') && incomingToTarget.length >= 1) {
+      throw new Error(`La IA genero multiples entradas para ${to.name}`);
+    }
+    if ((fromType === 'decision' || fromType === 'iteracion') && outgoing.length >= 2) {
+      throw new Error(`La IA genero demasiadas salidas para ${from.name}`);
+    }
+    if (fromType === 'union' && outgoing.length >= 1) {
+      throw new Error(`La IA genero demasiadas salidas para ${from.name}`);
+    }
+    if (toType === 'bifurcasion' && incomingToTarget.length >= 1) {
+      throw new Error(`La IA genero demasiadas entradas para ${to.name}`);
+    }
+    if (fromType === 'proceso' && outgoing.length >= 1) {
+      throw new Error(`La IA intento sacar multiples salidas desde el proceso ${from.name}`);
     }
   }
 
@@ -1294,6 +1497,21 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
         type: field.type || 'TEXT',
         columns: field.type === 'GRID' ? this.normalizeGridColumns(field.columns) : [],
         isRequired: Boolean(field.required),
+        order: field.order || index + 1
+      }))
+    };
+  }
+
+  private normalizeVoiceFormDefinition(formDefinition: FormVoiceDesignResult['formDefinition']) {
+    if (!formDefinition) return null;
+    return {
+      title: formDefinition.title || 'Formulario',
+      fields: (formDefinition.fields ?? []).map((field, index) => ({
+        id: field.id || this.createFieldId(),
+        name: field.name || `campo_${index + 1}`,
+        type: field.type || 'TEXT',
+        columns: field.type === 'GRID' ? this.normalizeGridColumns(field.columns) : [],
+        isRequired: Boolean(field.isRequired ?? field.required),
         order: field.order || index + 1
       }))
     };

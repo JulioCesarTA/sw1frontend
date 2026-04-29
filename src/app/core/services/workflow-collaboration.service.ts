@@ -32,6 +32,23 @@ export interface CollaborativeWorkflowNodo {
   posX?: number;
   posY?: number;
   responsibleJobRoleId?: string;
+  formDefinition?: {
+    id?: string;
+    title: string;
+    fields: Array<{
+      id: string;
+      name: string;
+      type: string;
+      columns?: Array<{
+        id: string;
+        name: string;
+        type: string;
+        order: number;
+      }>;
+      isRequired?: boolean;
+      order: number;
+    }>;
+  } | null;
 }
 
 export interface CollaborativeWorkflowTransition {

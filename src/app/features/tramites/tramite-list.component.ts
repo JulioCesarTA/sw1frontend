@@ -216,6 +216,8 @@ export class TramiteListComponent implements OnInit {
   formWorkflowId = '';
   codeFilter = signal('');
   private speechRecognition: any = null;
+  private shouldApplyVoice = false;
+  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
 
   entryFormFields = computed(() => [...(this.entryNodo()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
   filteredTramites = computed(() => {
@@ -355,18 +357,30 @@ export class TramiteListComponent implements OnInit {
     }
     this.speechRecognition = new SpeechRecognitionCtor();
     this.speechRecognition.lang = 'es-ES';
-    this.speechRecognition.continuous = false;
-    this.speechRecognition.interimResults = false;
+    this.speechRecognition.continuous = true;
+    this.speechRecognition.interimResults = true;
+    this.shouldApplyVoice = false;
     this.speechRecognition.onstart = () => {
       this.voiceListening.set(true);
       this.voiceTranscript.set('');
+      this.clearSilenceTimer();
     };
     this.speechRecognition.onerror = () => {
       this.voiceListening.set(false);
+      this.clearSilenceTimer();
+      this.shouldApplyVoice = false;
       this.snack.open('No se pudo capturar la voz', '', { duration: 3000 });
     };
     this.speechRecognition.onend = () => {
+      this.clearSilenceTimer();
       this.voiceListening.set(false);
+      const shouldApply = this.shouldApplyVoice;
+      this.shouldApplyVoice = false;
+      this.speechRecognition = null;
+      const transcript = this.voiceTranscript().trim();
+      if (shouldApply && transcript) {
+        this.applyVoiceTranscript(transcript);
+      }
     };
     this.speechRecognition.onresult = (event: any) => {
       const transcript = Array.from(event.results ?? [])
@@ -375,7 +389,7 @@ export class TramiteListComponent implements OnInit {
         .trim();
       if (!transcript) return;
       this.voiceTranscript.set(transcript);
-      this.applyVoiceTranscript(transcript);
+      this.restartSilenceTimer();
     };
     this.speechRecognition.start();
   }
@@ -397,13 +411,15 @@ export class TramiteListComponent implements OnInit {
     });
   }
 
-  private stopVoiceCapture(showMessage: boolean) {
+  private stopVoiceCapture(executeApply: boolean) {
+    this.shouldApplyVoice = executeApply;
+    this.clearSilenceTimer();
     if (this.speechRecognition) {
       this.speechRecognition.stop();
-      this.speechRecognition = null;
+      return;
     }
-    if (showMessage) {
-      this.snack.open('Captura de voz detenida', '', { duration: 1800 });
+    if (executeApply && this.voiceTranscript().trim()) {
+      this.applyVoiceTranscript(this.voiceTranscript().trim());
     }
     this.voiceListening.set(false);
   }
@@ -426,5 +442,21 @@ export class TramiteListComponent implements OnInit {
       },
       error: (err) => this.snack.open(err.error?.message || 'No se pudo interpretar la voz', '', { duration: 3000 })
     });
+  }
+
+  private restartSilenceTimer() {
+    this.clearSilenceTimer();
+    this.silenceTimer = setTimeout(() => {
+      if (this.voiceListening()) {
+        this.stopVoiceCapture(true);
+      }
+    }, 4000);
+  }
+
+  private clearSilenceTimer() {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
   }
 }

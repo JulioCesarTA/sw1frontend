@@ -210,12 +210,10 @@ export class UserListComponent implements OnInit {
   onCompanyChange() {
     this.form.departmentId = '';
     this.form.jobRoleId = '';
-    this.loadJobRoles();
   }
 
   onDepartmentChange() {
     this.form.jobRoleId = '';
-    this.loadJobRoles();
   }
 
   openCreate() {
@@ -228,7 +226,6 @@ export class UserListComponent implements OnInit {
       departmentId: '',
       jobRoleId: ''
     };
-    this.loadJobRoles();
     this.showForm.set(true);
   }
 
@@ -242,13 +239,11 @@ export class UserListComponent implements OnInit {
       departmentId: user.departmentId || '',
       jobRoleId: user.jobRoleId || ''
     };
-    this.loadJobRoles();
     this.showForm.set(true);
   }
 
   private loadJobRoles() {
-    const params = this.form.departmentId ? { departmentId: this.form.departmentId } : undefined;
-    this.api.get<JobRole[]>('/job-roles', params).subscribe({
+    this.api.get<JobRole[]>('/job-roles').subscribe({
       next: jobRoles => this.jobRoles.set(jobRoles),
       error: () => this.jobRoles.set([])
     });

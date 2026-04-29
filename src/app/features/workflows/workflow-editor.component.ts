@@ -208,6 +208,7 @@ interface FormVoiceDesignResult {
   } | null;
   changes?: string;
   warnings?: string[];
+  patches?: FormVoiceDesignResult[];
 }
 
 @Component({
@@ -283,7 +284,19 @@ interface FormVoiceDesignResult {
                   }
                 </div>
 
-                <div class="flex gap-2.5">
+                <div class="flex items-center gap-2.5">
+                  <button
+                    mat-stroked-button
+                    type="button"
+                    [disabled]="isFormVoiceBusy()"
+                    (click)="toggleFormVoiceCapture()">
+                    @if (isFormVoiceListening()) {
+                      <mat-icon>mic_off</mat-icon>
+                    } @else {
+                      <mat-icon>mic</mat-icon>
+                    }
+                    {{ isFormVoiceListening() ? 'Detener voz' : 'Hablar formularios' }}
+                  </button>
                   @if (connectingFromId()) {
                     <button mat-stroked-button (click)="cancelConnect()"><mat-icon>link_off</mat-icon> Cancelar conexion</button>
                   }
@@ -674,6 +687,21 @@ interface FormVoiceDesignResult {
                   Haz click en un nodo para editarlo o en la flecha para editar lo que pasa de A hacia B.
                 </div>
               }
+              <app-workflow-ai-panel
+                #formVoiceAssistant
+                class="hidden"
+                [activeTab]="'diagram-ai'"
+                [workflowId]="workflow()?.id || ''"
+                [workflowName]="workflow()?.name || ''"
+                [nodo]="workflow()?.nodo || []"
+                [transitions]="workflow()?.transitions || []"
+                [departments]="departments()"
+                [jobRoles]="jobRoles()"
+                [selectedNodo]="selectedNodo()"
+                [applyAiActions]="applyAiActionsBound"
+                [applyVoiceFormPatch]="applyVoiceFormPatchBound"
+                [onError]="showAiError">
+              </app-workflow-ai-panel>
             </aside>
           </div>
         }
@@ -683,6 +711,7 @@ interface FormVoiceDesignResult {
 })
 export class WorkflowEditorComponent implements OnInit, OnDestroy {
   @ViewChild('canvas') canvas?: ElementRef<HTMLDivElement>;
+  @ViewChild('formVoiceAssistant') formVoiceAssistant?: WorkflowAiPanelComponent;
 
   private paletteDragMimeType = 'application/x-workflow-node';
   private route = inject(ActivatedRoute);
@@ -804,6 +833,18 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       this.collab.unlockNodo(selectedNodoId);
     }
     this.collab.disconnect();
+  }
+
+  toggleFormVoiceCapture() {
+    this.formVoiceAssistant?.toggleFormVoiceCapture();
+  }
+
+  isFormVoiceListening() {
+    return this.formVoiceAssistant?.isFormVoiceListening() ?? false;
+  }
+
+  isFormVoiceBusy() {
+    return this.formVoiceAssistant?.isFormVoiceBusy() ?? false;
   }
 
   goBack() {

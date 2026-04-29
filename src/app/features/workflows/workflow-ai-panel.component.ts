@@ -150,6 +150,7 @@ interface FormVoiceDesignResult {
   } | null;
   changes?: string;
   warnings?: string[];
+  patches?: FormVoiceDesignResult[];
 }
 
 interface WorkySuggestion {
@@ -229,20 +230,7 @@ declare global {
           rows="6"
           class="w-full rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500"
           placeholder="Ejemplo: elimina el nodo Revision, crea un proceso Aprobacion final y conectalo con Fin"></textarea>
-        @if (diagramVoiceTranscript()) {
-          <div class="rounded-2xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-            {{ diagramVoiceTranscript() }}
-          </div>
-        }
         <div class="flex justify-end gap-2">
-          <button mat-stroked-button type="button" [disabled]="diagramBusy() || diagramVoiceProcessing()" (click)="toggleDiagramVoiceCapture()">
-            @if (diagramVoiceListening()) {
-              <mat-spinner diameter="18" />
-            } @else {
-              <mat-icon>mic</mat-icon>
-            }
-            {{ diagramVoiceListening() ? 'Detener grabacion' : 'Hablar' }}
-          </button>
           <button mat-flat-button color="primary" [disabled]="diagramBusy() || diagramVoiceListening() || !diagramPrompt.trim()" (click)="runDiagramCommand()">
             @if (diagramBusy()) {
               <mat-spinner diameter="18" />
@@ -486,7 +474,7 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   }
 
   private async executeAiCommand(command: string, fromVoice: boolean) {
-    if (this.looksLikeFormCommand(command)) {
+    if (this.looksLikeFormIntent(command)) {
       await this.executeFormVoiceCommand(command);
       return;
     }
@@ -531,7 +519,8 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
         transcript: command,
         selectedNodo: this.selectedNodo
       }));
-      if (result.warnings?.length && !result.targetNodoId) {
+      const patches = result.patches?.length ? result.patches : [result];
+      if (result.warnings?.length && !patches.some(item => item.targetNodoId)) {
         this.diagramResult.set({
           interpretation: 'No se aplicaron cambios al formulario',
           changes: result.warnings.join(' | '),
@@ -539,10 +528,15 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
         });
         return;
       }
-      await this.applyVoiceFormPatch(result);
+      for (const patch of patches) {
+        if (!patch.targetNodoId) continue;
+        await this.applyVoiceFormPatch(patch);
+      }
       const warnings = result.warnings?.length ? ` Advertencias: ${result.warnings.join(' | ')}` : '';
       this.diagramResult.set({
-        interpretation: `Formulario actualizado en ${this.resolveNodoName(result.targetNodoId)}`,
+        interpretation: patches.length > 1
+          ? `Formularios actualizados en ${patches.filter(item => item.targetNodoId).length} nodo(s)`
+          : `Formulario actualizado en ${this.resolveNodoName(result.targetNodoId)}`,
         changes: `${result.changes || 'Cambios aplicados al formulario.'}${warnings}`,
         actions: []
       });
@@ -733,6 +727,73 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
     this.speechRecognition.start();
   }
 
+  toggleFormVoiceCapture() {
+    if (this.diagramVoiceListening()) {
+      this.stopFormVoiceCapture(true);
+      return;
+    }
+    const SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognitionCtor) {
+      this.handleError('Tu navegador no soporta reconocimiento de voz');
+      return;
+    }
+    this.shouldExecuteVoiceCommand = false;
+    this.speechRecognition = new SpeechRecognitionCtor();
+    this.speechRecognition.lang = 'es-ES';
+    this.speechRecognition.continuous = true;
+    this.speechRecognition.interimResults = true;
+    this.speechRecognition.onstart = () => {
+      this.diagramVoiceListening.set(true);
+      this.diagramVoiceTranscript.set('');
+      this.clearSilenceTimer();
+    };
+    this.speechRecognition.onerror = () => {
+      this.diagramVoiceListening.set(false);
+      this.diagramVoiceProcessing.set(false);
+      this.shouldExecuteVoiceCommand = false;
+      this.clearSilenceTimer();
+      this.handleError('No se pudo capturar la voz');
+    };
+    this.speechRecognition.onend = async () => {
+      this.clearSilenceTimer();
+      this.diagramVoiceListening.set(false);
+      const shouldExecute = this.shouldExecuteVoiceCommand;
+      this.shouldExecuteVoiceCommand = false;
+      if (!shouldExecute) {
+        return;
+      }
+      const transcript = this.diagramVoiceTranscript().trim();
+      if (!transcript) {
+        this.diagramVoiceProcessing.set(false);
+        this.handleError('No se detecto ningun comando de voz');
+        return;
+      }
+      try {
+        await this.executeFormVoiceCommand(transcript);
+      } finally {
+        this.diagramVoiceProcessing.set(false);
+      }
+    };
+    this.speechRecognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results ?? [])
+        .map((result: any) => result?.[0]?.transcript || '')
+        .join(' ')
+        .trim();
+      if (!transcript) return;
+      this.diagramVoiceTranscript.set(transcript);
+      this.restartFormSilenceTimer();
+    };
+    this.speechRecognition.start();
+  }
+
+  isFormVoiceListening() {
+    return this.diagramVoiceListening();
+  }
+
+  isFormVoiceBusy() {
+    return this.diagramVoiceProcessing() || this.diagramBusy();
+  }
+
   private queueWorkyRefresh() {
     if (this.workyRefreshTimer) {
       clearTimeout(this.workyRefreshTimer);
@@ -774,6 +835,11 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
     return /formulario|campo|grilla|grid|checkbox|check|obligatorio|required|requerido|columna|titulo del formulario|título del formulario/.test(normalized);
   }
 
+  private looksLikeFormIntent(command: string) {
+    const normalized = command.trim().toLowerCase();
+    return /formulario|campo|campos|grilla|grid|tabla|checkbox|check|obligatorio|required|requerido|mandatorio|columna|columnas|tipo fecha|tipo grilla|tipo grid|tipo texto|tipo numero|tipo correo|tipo email|tipo archivo|primera columna|segunda columna|tercera columna|cuarta columna|titulo del formulario|t[íi]tulo del formulario|agrega.+campo|anade.+campo|añade.+campo/.test(normalized);
+  }
+
   private resolveNodoName(nodoId: string) {
     return this.nodo.find(item => item.id === nodoId)?.name || nodoId || 'nodo';
   }
@@ -799,11 +865,37 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
     }
   }
 
+  private stopFormVoiceCapture(executeCommand = false) {
+    this.shouldExecuteVoiceCommand = executeCommand;
+    if (executeCommand) {
+      this.diagramVoiceProcessing.set(true);
+    }
+    this.clearSilenceTimer();
+    if (this.speechRecognition) {
+      this.speechRecognition.stop();
+      this.speechRecognition = null;
+      return;
+    }
+    this.diagramVoiceListening.set(false);
+    if (executeCommand) {
+      this.diagramVoiceProcessing.set(false);
+    }
+  }
+
   private restartSilenceTimer() {
     this.clearSilenceTimer();
     this.silenceTimer = setTimeout(() => {
       if (this.diagramVoiceListening()) {
         this.stopDiagramVoiceCapture(true);
+      }
+    }, 4000);
+  }
+
+  private restartFormSilenceTimer() {
+    this.clearSilenceTimer();
+    this.silenceTimer = setTimeout(() => {
+      if (this.diagramVoiceListening()) {
+        this.stopFormVoiceCapture(true);
       }
     }, 4000);
   }

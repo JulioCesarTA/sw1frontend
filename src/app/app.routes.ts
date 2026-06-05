@@ -45,6 +45,10 @@ export const routes: Routes = [
         loadComponent: () => import('./features/activities/activities.component').then(m => m.ActivitiesComponent)
       },
       {
+        path: 'workflow-assistant',
+        loadComponent: () => import('./features/workflow-assistant/workflow-assistant.component').then(m => m.WorkflowAssistantComponent)
+      },
+      {
         path: 'tramites/:id',
         loadComponent: () => import('./features/tramites/tramite-detail.component').then(m => m.TramiteDetailComponent)
       },
@@ -55,6 +59,14 @@ export const routes: Routes = [
       {
         path: 'reports',
         loadComponent: () => import('./features/reports/reports.component').then(m => m.ReportsComponent)
+      },
+      {
+        path: 'document-audit',
+        loadComponent: () => import('./features/document-audit/document-audit.component').then(m => m.DocumentAuditComponent)
+      },
+      {
+        path: 'collab-docs/:id',
+        loadComponent: () => import('./features/collab-docs/collab-editor.component').then(m => m.CollabEditorComponent)
       }
     ]
   },

@@ -1,6 +1,7 @@
 ﻿import { CommonModule } from "@angular/common";
 import { Component, computed, inject, OnInit, signal } from "@angular/core";
 import { FormsModule } from "@angular/forms";
+import { Router } from "@angular/router";
 import { MatButtonModule } from "@angular/material/button";
 import { MatCardModule } from "@angular/material/card";
 import { MatCheckboxModule } from "@angular/material/checkbox";
@@ -10,7 +11,8 @@ import { MatInputModule } from "@angular/material/input";
 import { MatProgressSpinnerModule } from "@angular/material/progress-spinner";
 import { MatSnackBar, MatSnackBarModule } from "@angular/material/snack-bar";
 import { ApiService } from "../../core/services/api.service";
-import { isStoredFileValue, openStoredFileDownload, storedFileLabel } from "../../core/utils/file-value.utils";
+import { CollabDocService } from "../../core/services/collab-doc.service";
+import { isStoredFileArray, isStoredFileValue, openStoredFileDownload, storedFileLabel, StoredFileValue } from "../../core/utils/file-value.utils";
 
 interface ActivitySummary { id: string; code: string; title: string; status: string; workflowName: string; currentNodoName: string; }
 interface ActivityTransition { id: string; name?: string; label?: string; resultadoRama?: string; }
@@ -20,7 +22,8 @@ interface ActivityForm { id: string; title: string; fields: ActivityFormField[];
 interface UploadedFile { fileName: string; storedName: string; downloadPath?: string; }
 interface IncomingField { name: string; type?: string; columns?: GridColumn[]; value: unknown; }
 interface IncomingBlock { transitionId: string; transitionName?: string; fromNodoName: string; fields: IncomingField[]; }
-interface ActivityDetail { id: string; code: string; workflowName: string; currentNodoId: string; currentNodoName: string; formData?: Record<string, unknown>; formDefinition?: ActivityForm; availableTransitions: ActivityTransition[]; incomingData: IncomingBlock[]; }
+interface DocumentAccess { canCreate: boolean; canRead: boolean; canEdit: boolean; }
+interface ActivityDetail { id: string; code: string; workflowId?: string; workflowName: string; currentNodoId: string; currentNodoName: string; formData?: Record<string, unknown>; formDefinition?: ActivityForm; availableTransitions: ActivityTransition[]; incomingData: IncomingBlock[]; canAdvance?: boolean; documentAccess?: DocumentAccess; }
 interface VoiceFillResponse { transcript: string; formData: Record<string, unknown>; appliedFields: Array<{ field: string; value: unknown }>; warnings: string[]; }
 
 declare global {
@@ -119,7 +122,13 @@ declare global {
                                 </table>
                               </div>
                             } @else if (isUploadedFile(field.value)) {
-                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(field.value)">{{ uploadedFileName(field.value) }}</button>
+                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(field.name, field.value)">{{ uploadedFileName(field.value) }}</button>
+                            } @else if (isUploadedFileList(field.value)) {
+                              <div class="flex flex-col gap-1">
+                                @for (file of toUploadedFiles(field.value); track file.storedName) {
+                                  <button type="button" class="cursor-pointer border-none bg-transparent p-0 text-left font-inherit text-indigo-600 underline" (click)="downloadFile(field.name, file)">{{ uploadedFileName(file) }}</button>
+                                }
+                              </div>
                             } @else if (field.type === 'CHECKBOX') {
                               {{ toBoolean(field.value) ? 'Si' : 'No' }}
                             } @else {
@@ -136,12 +145,28 @@ declare global {
               @if (tramiteFiles().length) {
                 <section class="mb-[18px]">
                   <h4 class="mb-3 text-[15px] font-semibold text-slate-800">Archivos del trámite</h4>
-                  <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div class="flex flex-col gap-2">
                     @for (file of tramiteFiles(); track file.name) {
-                      <div class="flex items-center gap-2 py-1">
-                        <mat-icon class="!h-4 !w-4 !text-base text-slate-400">attach_file</mat-icon>
-                        <span class="text-xs text-slate-500">{{ file.name }}:</span>
-                        <button type="button" class="cursor-pointer border-none bg-transparent p-0 text-xs text-indigo-600 underline" (click)="downloadFile(file.value)">{{ uploadedFileName(file.value) }}</button>
+                      <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ file.name }}</p>
+                        @for (f of tramiteFileItems(file.value); track f.storedName) {
+                          <div class="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                            <mat-icon class="!h-4 !w-4 !text-base text-slate-400">description</mat-icon>
+                            <span class="flex-1 truncate text-sm text-slate-800">{{ f.fileName || f.storedName }}</span>
+                            <button type="button" class="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" (click)="downloadFile(file.name, f)">
+                              <mat-icon class="!h-3.5 !w-3.5 !text-sm">download</mat-icon> Descargar
+                            </button>
+                            <button type="button" class="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700" (click)="openInEditor(file.name, f)">
+                              <mat-icon class="!h-3.5 !w-3.5 !text-sm">edit</mat-icon> Editar colaborativamente
+                            </button>
+                          </div>
+                        }
+                        @if (documentAccess().canEdit) {
+                          <label class="mt-2 flex cursor-pointer items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700">
+                            <mat-icon class="!h-3.5 !w-3.5 !text-sm">upload</mat-icon> Reemplazar archivo
+                            <input type="file" class="hidden" (change)="replaceFile(file.name, $event)" />
+                          </label>
+                        }
                       </div>
                     }
                   </div>
@@ -152,7 +177,7 @@ declare global {
                 <section class="mb-[18px]">
                   <div class="mb-3 flex items-center justify-between gap-3">
                     <h4 class="text-[15px] font-semibold text-slate-800">{{ formTitle() }}</h4>
-                    <button mat-stroked-button type="button" [disabled]="voiceLoading()" (click)="toggleVoiceCapture()">
+                    <button mat-stroked-button type="button" [disabled]="voiceLoading() || !canAdvance()" (click)="toggleVoiceCapture()">
                       <mat-icon>{{ voiceListening() ? 'mic_off' : 'mic' }}</mat-icon>
                       {{ voiceListening() ? 'Detener voz' : 'Llenar por voz' }}
                     </button>
@@ -161,13 +186,13 @@ declare global {
                     @if (field.type === "FILE") {
                       <div class="mb-4 flex flex-col gap-2">
                         <label class="text-[13px] font-medium text-slate-700">{{ field.name }}</label>
-                        <input class="text-[13px] text-slate-700" type="file" (change)="uploadFile(field, $event)" />
-                        @if (fieldValue(field)) {
-                          <div class="text-xs text-indigo-500">
-                            @if (isUploadedFile(fieldValue(field))) {
-                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(fieldValue(field))">{{ uploadedFileName(fieldValue(field)) }}</button>
-                            } @else {
-                              {{ fieldValue(field) }}
+                        @if (canUploadForField(field)) {
+                          <input class="text-[13px] text-slate-700" type="file" multiple (change)="uploadFiles(field, $event)" />
+                        }
+                        @if (fileItemsForField(field).length) {
+                          <div class="flex flex-col gap-1 text-xs text-indigo-500">
+                            @for (file of fileItemsForField(field); track file.storedName) {
+                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 text-left font-inherit text-indigo-600 underline" (click)="downloadFile(field.name, file)">{{ uploadedFileName(file) }}</button>
                             }
                           </div>
                         }
@@ -176,7 +201,7 @@ declare global {
                       <div class="mb-4">
                         <div class="mb-2 flex items-center justify-between gap-3">
                           <label class="text-[13px] font-medium text-slate-700">{{ field.name }}</label>
-                          <button mat-stroked-button type="button" (click)="addGridRow(field)">Agregar fila</button>
+                          <button mat-stroked-button type="button" [disabled]="!canAdvance()" (click)="addGridRow(field)">Agregar fila</button>
                         </div>
                         @if (gridColumns(field).length) {
                           <div class="overflow-x-auto rounded-xl border border-slate-200">
@@ -195,10 +220,11 @@ declare global {
                                     @for (column of gridColumns(field); track column.id) {
                                       <td class="px-3 py-2">
                                         @if (column.type === 'CHECKBOX') {
-                                          <mat-checkbox [ngModel]="toBoolean(row[column.name])" (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)"></mat-checkbox>
+                                          <mat-checkbox [disabled]="!canAdvance()" [ngModel]="toBoolean(row[column.name])" (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)"></mat-checkbox>
                                         } @else {
                                           <input
                                             class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
+                                            [disabled]="!canAdvance()"
                                             [type]="inputType(column.type)"
                                             [ngModel]="row[column.name] ?? ''"
                                             (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)" />
@@ -206,7 +232,7 @@ declare global {
                                       </td>
                                     }
                                     <td class="px-3 py-2 text-right">
-                                      <button mat-button color="warn" type="button" (click)="removeGridRow(field, rowIndex)">Quitar</button>
+                                        <button mat-button color="warn" type="button" [disabled]="!canAdvance()" (click)="removeGridRow(field, rowIndex)">Quitar</button>
                                     </td>
                                   </tr>
                                 } @empty {
@@ -225,21 +251,21 @@ declare global {
                       </div>
                     } @else if (field.type === "CHECKBOX") {
                       <div class="mb-4 rounded-xl border border-slate-200 px-3 py-2">
-                        <mat-checkbox [ngModel]="toBoolean(fieldValue(field))" (ngModelChange)="setFieldValue(field, $event)">
+                        <mat-checkbox [disabled]="!canAdvance()" [ngModel]="toBoolean(fieldValue(field))" (ngModelChange)="setFieldValue(field, $event)">
                           {{ field.name }}
                         </mat-checkbox>
                       </div>
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
                         <mat-label>{{ field.name }}</mat-label>
-                        <input matInput [type]="inputType(field.type)" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field, $event)" />
+                        <input matInput [disabled]="!canAdvance()" [type]="inputType(field.type)" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field, $event)" />
                       </mat-form-field>
                     }
                   }
                 </section>
               }
 
-              @if (visibleTransitions().length) {
+              @if (visibleTransitions().length && canAdvance()) {
                 <div class="mt-2 flex flex-wrap justify-end gap-3">
                   @for (transition of visibleTransitions(); track transition.id) {
                     <button mat-flat-button
@@ -267,6 +293,8 @@ declare global {
 export class ActivitiesComponent implements OnInit {
   private api = inject(ApiService);
   private snackBar = inject(MatSnackBar);
+  private router = inject(Router);
+  private collabDocService = inject(CollabDocService);
 
   activities = signal<ActivitySummary[]>([]);
   selectedActivity = signal<ActivityDetail | null>(null);
@@ -286,6 +314,8 @@ export class ActivitiesComponent implements OnInit {
   formFields = computed(() => [...(this.formularioActual()?.fields ?? this.selectedActivity()?.formDefinition?.fields ?? [])].sort((first, second) => (first.order ?? 0) - (second.order ?? 0)));
   formTitle = computed(() => this.formularioActual()?.title || this.selectedActivity()?.formDefinition?.title || "Formulario");
   visibleTransitions = computed(() => this.selectedActivity()?.availableTransitions ?? []);
+  canAdvance = computed(() => Boolean(this.selectedActivity()?.canAdvance));
+  documentAccess = computed(() => this.selectedActivity()?.documentAccess ?? { canCreate: false, canRead: false, canEdit: false });
   tramiteFiles = computed(() => {
     const formFieldNames = new Set(this.formFields().map(f => f.name));
     const incomingFieldNames = new Set(
@@ -294,7 +324,7 @@ export class ActivitiesComponent implements OnInit {
     );
     return Object.entries(this.fieldValues())
       .filter(([name, value]) =>
-        isStoredFileValue(value)
+        (isStoredFileValue(value) || isStoredFileArray(value))
         && !formFieldNames.has(name)
         && !incomingFieldNames.has(name)
       )
@@ -414,7 +444,22 @@ export class ActivitiesComponent implements OnInit {
       : [];
   }
   isUploadedFile(value: unknown): value is UploadedFile { return isStoredFileValue(value); }
+  isUploadedFileList(value: unknown): value is UploadedFile[] { return isStoredFileArray(value); }
   uploadedFileName(value: unknown) { return storedFileLabel(value); }
+  toUploadedFiles(value: unknown): UploadedFile[] {
+    if (this.isUploadedFile(value)) return [value];
+    if (this.isUploadedFileList(value)) return value;
+    return [];
+  }
+
+  fileItemsForField(field: ActivityFormField) {
+    return this.toUploadedFiles(this.fieldValues()[field.name]);
+  }
+
+  canUploadForField(field: ActivityFormField) {
+    const files = this.fileItemsForField(field);
+    return files.length ? this.documentAccess().canEdit : this.documentAccess().canCreate;
+  }
 
   toggleVoiceCapture() {
     if (this.voiceListening()) {
@@ -424,22 +469,80 @@ export class ActivitiesComponent implements OnInit {
     this.startVoiceCapture();
   }
 
-  uploadFile(field: ActivityFormField, event: Event) {
-    const file = (event.target as HTMLInputElement | null)?.files?.[0];
-    if (!file) return;
-    const body = new FormData();
-    body.append("file", file);
-    this.api.post<UploadedFile>("/files/upload", body).subscribe({
-      next: (uploaded) => {
-        this.setFieldValue(field, uploaded);
-        this.snackBar.open(`Archivo "${uploaded.fileName || file.name}" subido`, "", { duration: 3000 });
-      },
-      error: () => this.snackBar.open("Error al subir archivo", "", { duration: 3000 }),
+  uploadFiles(field: ActivityFormField, event: Event) {
+    const files = Array.from((event.target as HTMLInputElement | null)?.files ?? []);
+    if (!files.length) return;
+    if (!this.canUploadForField(field)) {
+      this.snackBar.open("No tienes permisos para cargar archivos en este nodo", "", { duration: 3000 });
+      return;
+    }
+    const existingFiles = this.fileItemsForField(field);
+    const uploadedFiles: UploadedFile[] = [];
+    const uploadNext = (index: number) => {
+      if (index >= files.length) {
+        this.setFieldValue(field, [...existingFiles, ...uploadedFiles]);
+        this.snackBar.open(`${uploadedFiles.length} archivo(s) subidos`, "", { duration: 3000 });
+        return;
+      }
+      const file = files[index];
+      const body = new FormData();
+      body.append("file", file);
+      const wfId = this.selectedActivity()?.workflowId;
+      if (wfId) body.append("workflowId", wfId);
+      this.api.post<UploadedFile>("/files/upload", body).subscribe({
+        next: (uploaded) => {
+          uploadedFiles.push(uploaded);
+          uploadNext(index + 1);
+        },
+        error: () => this.snackBar.open(`Error al subir "${file.name}"`, "", { duration: 3000 }),
+      });
+    };
+    uploadNext(0);
+  }
+
+  tramiteFileItems(value: unknown): StoredFileValue[] {
+    if (isStoredFileValue(value)) return [value];
+    if (isStoredFileArray(value)) return value;
+    return [];
+  }
+
+  downloadFile(fieldName: string, value: unknown) {
+    if (!this.documentAccess().canRead) {
+      this.snackBar.open("No tienes permisos para leer este documento", "", { duration: 3000 });
+      return;
+    }
+    openStoredFileDownload(value, { tramiteId: this.selectedActivity()?.id, fieldName });
+  }
+
+  openInEditor(fieldName: string, file: StoredFileValue) {
+    const activity = this.selectedActivity();
+    if (!activity) return;
+    this.collabDocService.openFile({
+      tramiteId: activity.id,
+      storedName: file.storedName,
+      workflowId: activity.workflowId,
+      title: file.fileName || fieldName,
+    }).subscribe({
+      next: (doc) => this.router.navigate(['/collab-docs', doc.id]),
+      error: () => this.snackBar.open("No se pudo abrir el archivo en el editor", "", { duration: 3000 }),
     });
   }
 
-  downloadFile(value: unknown) {
-    openStoredFileDownload(value);
+  replaceFile(fieldName: string, event: Event) {
+    const files = Array.from((event.target as HTMLInputElement | null)?.files ?? []);
+    if (!files.length || !this.documentAccess().canEdit) return;
+    const file = files[0];
+    const body = new FormData();
+    body.append("file", file);
+    const wfId = this.selectedActivity()?.workflowId;
+    if (wfId) body.append("workflowId", wfId);
+    this.api.post<UploadedFile>("/files/upload", body).subscribe({
+      next: (uploaded) => {
+        this.fieldValues.update(current => ({ ...current, [fieldName]: uploaded }));
+        this.snackBar.open("Archivo reemplazado", "", { duration: 2500 });
+      },
+      error: () => this.snackBar.open("Error al reemplazar archivo", "", { duration: 3000 }),
+    });
   }
 
   private startVoiceCapture() {

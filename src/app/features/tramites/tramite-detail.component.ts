@@ -5,6 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ApiService } from '../../core/services/api.service';
+import { CollabDocListComponent } from '../collab-docs/collab-doc-list.component';
 
 interface HistoryEntry { id: string; action: string; fromNodoId?: string; toNodoId?: string; comment?: string; changedAt: string; nodoName?: string; departmentName?: string; jobRoleName?: string; isCurrent?: boolean }
 interface TramiteDetail { id: string; code: string; title: string; description?: string; status: string; workflowId: string; currentNodoId: string; history: HistoryEntry[] }
@@ -28,7 +29,7 @@ const H_ICONS: Record<string, string> = {
 @Component({
   selector: 'app-tramite-detail',
   standalone: true,
-  imports: [CommonModule, MatIconModule, MatCardModule, MatProgressSpinnerModule],
+  imports: [CommonModule, MatIconModule, MatCardModule, MatProgressSpinnerModule, CollabDocListComponent],
   template: `
     <div class="mx-auto flex w-full max-w-[1400px] flex-col gap-6 px-6 py-6">
       <div class="flex items-center gap-3">
@@ -53,6 +54,10 @@ const H_ICONS: Record<string, string> = {
             <h3 class="mb-3 text-base font-semibold text-slate-900">Seguimiento</h3>
             <p class="mb-2 text-sm text-slate-600"><strong class="text-slate-900">Etapa actual:</strong> {{ currentNodoName() || 'Sin etapa activa' }}</p>
             <p class="text-sm text-slate-600"><strong class="text-slate-900">Workflow:</strong> {{ tramite()!.workflowId }}</p>
+          </mat-card>
+
+          <mat-card class="rounded-3xl p-5 shadow-sm xl:col-span-2">
+            <app-collab-doc-list [tramiteId]="tramite()!.id" />
           </mat-card>
 
           <mat-card class="rounded-3xl p-5 shadow-sm xl:col-span-2">

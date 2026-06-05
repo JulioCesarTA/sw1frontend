@@ -22,6 +22,47 @@ $theme: mat.define-light-theme((
 
 @include mat.all-component-themes($theme);
 
+/* ── TipTap / ProseMirror editor styles ─────────────────────────────── */
+.tiptap-editor .ProseMirror {
+  outline: none;
+  min-height: 400px;
+  padding: 1.5rem;
+  font-size: 1rem;
+  line-height: 1.75;
+  color: #1e293b;
+}
+.tiptap-editor .ProseMirror p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
+.tiptap-editor .ProseMirror h1 { font-size: 1.75rem; font-weight: 700; margin: 1rem 0 0.5rem; }
+.tiptap-editor .ProseMirror h2 { font-size: 1.4rem;  font-weight: 700; margin: 1rem 0 0.5rem; }
+.tiptap-editor .ProseMirror h3 { font-size: 1.15rem; font-weight: 600; margin: 0.75rem 0 0.5rem; }
+.tiptap-editor .ProseMirror ul { list-style: disc;    padding-left: 1.5rem; }
+.tiptap-editor .ProseMirror ol { list-style: decimal; padding-left: 1.5rem; }
+.tiptap-editor .ProseMirror blockquote { border-left: 3px solid #6366f1; padding-left: 1rem; color: #64748b; margin: 0.5rem 0; }
+.tiptap-editor .ProseMirror code { background: #f1f5f9; border-radius: 4px; padding: 0.1em 0.3em; font-size: 0.9em; }
+.tiptap-editor .ProseMirror strong { font-weight: 700; }
+.tiptap-editor .ProseMirror em { font-style: italic; }
+.tiptap-editor .ProseMirror table { border-collapse: collapse; }
+.tiptap-editor .ProseMirror table td,
+.tiptap-editor .ProseMirror table th { border: 1px solid #94a3b8; padding: 3px 8px; vertical-align: top; position: relative; }
+.tiptap-editor .ProseMirror table .selectedCell:after {
+  background: rgba(99,102,241,0.15); content: ''; left: 0; right: 0; top: 0; bottom: 0; pointer-events: none; position: absolute;
+}
+.tiptap-editor .ProseMirror .tableWrapper { overflow-x: auto; }
+
+/* Collab editor toolbar buttons */
+.toolbar-btn {
+  @apply flex items-center justify-center rounded-lg p-1.5 text-slate-600 transition hover:bg-slate-200 active:scale-95;
+}
+.export-btn {
+  @apply flex items-center gap-1 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition active:scale-95 disabled:opacity-50;
+}
+
 .mat-mdc-form-field .mdc-notched-outline__notch {
   border-left: 0 !important;
   border-right: 0 !important;

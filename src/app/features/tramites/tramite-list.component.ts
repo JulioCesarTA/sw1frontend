@@ -14,7 +14,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
-import { isStoredFileValue, openStoredFileDownload, storedFileLabel } from '../../core/utils/file-value.utils';
+import { isStoredFileArray, isStoredFileValue, openStoredFileDownload, storedFileLabel } from '../../core/utils/file-value.utils';
 
 interface Tramite { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
 interface Workflow { id: string; name: string }
@@ -105,9 +105,13 @@ declare global {
                   @if (field.type === 'FILE') {
                     <div class="mb-4 flex flex-col gap-2">
                       <label class="text-sm font-medium text-slate-700">{{ field.name }}</label>
-                      <input class="text-sm text-slate-700" type="file" (change)="onFileSelected(field, $event)">
-                      @if (fieldValue(field) && isFileValue(fieldValue(field))) {
-                        <button type="button" class="bg-transparent p-0 text-left text-xs text-indigo-600 underline" (click)="downloadFile(fieldValue(field))">{{ fileLabel(fieldValue(field)) }}</button>
+                      <input class="text-sm text-slate-700" type="file" multiple (change)="onFilesSelected(field, $event)">
+                      @if (fileItemsForField(field).length) {
+                        <div class="flex flex-col gap-1">
+                          @for (file of fileItemsForField(field); track file.storedName) {
+                            <button type="button" class="bg-transparent p-0 text-left text-xs text-indigo-600 underline" (click)="downloadFile(file)">{{ fileLabel(file) }}</button>
+                          }
+                        </div>
                       }
                     </div>
                   } @else if (field.type === 'GRID') {
@@ -329,16 +333,43 @@ export class TramiteListComponent implements OnInit {
   }
 
   isFileValue(v: unknown): v is FileValue { return isStoredFileValue(v); }
+  isFileList(v: unknown): v is FileValue[] { return isStoredFileArray(v); }
   fileLabel(v: unknown) { return storedFileLabel(v); }
   downloadFile(v: unknown) {
     openStoredFileDownload(v);
   }
 
-  onFileSelected(field: FormField, event: Event) {
-    const file = (event.target as HTMLInputElement)?.files?.[0];
-    if (!file) return;
-    const body = new FormData(); body.append('file', file);
-    this.api.post<FileValue>('/files/upload', body).subscribe({ next: u => { this.setFieldValue(field, u); this.snack.open(`Archivo "${u.fileName || file.name}" subido`, '', { duration: 3000 }); }, error: () => this.snack.open('Error al subir archivo', '', { duration: 3000 }) });
+  fileItemsForField(field: FormField): FileValue[] {
+    const value = this.formValues()[field.name];
+    if (this.isFileValue(value)) return [value];
+    if (this.isFileList(value)) return value;
+    return [];
+  }
+
+  onFilesSelected(field: FormField, event: Event) {
+    const files = Array.from((event.target as HTMLInputElement)?.files ?? []);
+    if (!files.length) return;
+    const uploaded: FileValue[] = [];
+    const existing = this.fileItemsForField(field);
+    const uploadNext = (index: number) => {
+      if (index >= files.length) {
+        this.setFieldValue(field, [...existing, ...uploaded]);
+        this.snack.open(`${uploaded.length} archivo(s) subidos`, '', { duration: 3000 });
+        return;
+      }
+      const file = files[index];
+      const body = new FormData();
+      body.append('file', file);
+      if (this.formWorkflowId) body.append('workflowId', this.formWorkflowId);
+      this.api.post<FileValue>('/files/upload', body).subscribe({
+        next: u => {
+          uploaded.push(u);
+          uploadNext(index + 1);
+        },
+        error: () => this.snack.open(`Error al subir "${file.name}"`, '', { duration: 3000 })
+      });
+    };
+    uploadNext(0);
   }
 
   toggleVoiceCapture() {

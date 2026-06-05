@@ -2,6 +2,7 @@
   "compileOnSave": false,
   "compilerOptions": {
     "ignoreDeprecations": "5.0",
+    "skipLibCheck": true,
     "rootDir": "./src",
     "outDir": "./dist/out-tsc",
     "forceConsistentCasingInFileNames": true,

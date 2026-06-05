@@ -47,6 +47,11 @@ import { AuthService } from '../core/services/auth.service';
               <mat-icon matListItemIcon>assignment</mat-icon>
               <span matListItemTitle>Actividades</span>
             </a>
+            <a mat-list-item routerLink="/workflow-assistant" routerLinkActive="bg-indigo-500/20 text-white"
+              class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
+              <mat-icon matListItemIcon>smart_toy</mat-icon>
+              <span matListItemTitle>Asistente IA</span>
+            </a>
             @if (auth.isSuperAdmin()) {
               <a mat-list-item routerLink="/companies" routerLinkActive="bg-indigo-500/20 text-white"
                 class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
@@ -74,6 +79,11 @@ import { AuthService } from '../core/services/auth.service';
                 class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
                 <mat-icon matListItemIcon>bar_chart</mat-icon>
                 <span matListItemTitle>Reportes</span>
+              </a>
+              <a mat-list-item routerLink="/document-audit" routerLinkActive="bg-indigo-500/20 text-white"
+                class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
+                <mat-icon matListItemIcon>manage_search</mat-icon>
+                <span matListItemTitle>Auditoria docs</span>
               </a>
             }
           </mat-nav-list>

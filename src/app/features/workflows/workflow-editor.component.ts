@@ -61,6 +61,13 @@ interface FormDefinition {
   fields: FormField[];
 }
 
+interface DocumentPermission {
+  departmentId: string;
+  canCreate: boolean;
+  canRead: boolean;
+  canEdit: boolean;
+}
+
 interface Nodo {
   id: string;
   workflowId: string;
@@ -78,6 +85,7 @@ interface Nodo {
   falseLabel?: string;
   posX?: number;
   posY?: number;
+  documentPermissions?: DocumentPermission[];
   formDefinition?: FormDefinition;
 }
 
@@ -130,6 +138,7 @@ interface NodoForm {
   falseLabel: string;
   condition: string;
   requiresForm: boolean;
+  documentPermissions: DocumentPermission[];
   formTitle: string;
   formFields: FormField[];
 }
@@ -511,6 +520,48 @@ interface FormVoiceDesignResult {
                     <mat-label>Promedio en minutos</mat-label>
                     <input matInput type="number" min="1" [(ngModel)]="nodoForm.avgMinutes">
                   </mat-form-field>
+
+                  <div class="mt-3 rounded-2xl border border-slate-200 p-3">
+                    <div class="mb-2 flex items-center justify-between gap-3">
+                      <div>
+                        <div class="text-sm font-semibold text-slate-900">Permisos documentales</div>
+                        <div class="text-xs text-slate-500">Define qué departamentos pueden crear, leer o editar archivos en este nodo.</div>
+                      </div>
+                      <button mat-stroked-button type="button" (click)="addDocumentPermission()">
+                        <mat-icon>add</mat-icon> Agregar
+                      </button>
+                    </div>
+
+                    <div class="grid gap-2">
+                      @for (permission of nodoForm.documentPermissions; track permission.departmentId + '-' + i; let i = $index) {
+                        <div class="rounded-xl border border-slate-200 p-3">
+                          <mat-form-field appearance="outline" class="w-full">
+                            <mat-label>Departamento</mat-label>
+                            <mat-select [(ngModel)]="permission.departmentId">
+                              <mat-option value="">Selecciona un departamento</mat-option>
+                              @for (department of departments(); track department.id) {
+                                <mat-option [value]="department.id">{{ department.name }}</mat-option>
+                              }
+                            </mat-select>
+                          </mat-form-field>
+
+                          <div class="flex flex-wrap gap-3">
+                            <mat-checkbox [(ngModel)]="permission.canCreate">Crear</mat-checkbox>
+                            <mat-checkbox [(ngModel)]="permission.canRead">Leer</mat-checkbox>
+                            <mat-checkbox [(ngModel)]="permission.canEdit">Editar</mat-checkbox>
+                          </div>
+
+                          <div class="mt-2 flex justify-end">
+                            <button mat-button color="warn" type="button" (click)="removeDocumentPermission(i)">Quitar</button>
+                          </div>
+                        </div>
+                      } @empty {
+                        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                          Sin reglas explícitas. Si lo dejas así, el área responsable del nodo conserva acceso documental por compatibilidad.
+                        </div>
+                      }
+                    </div>
+                  </div>
 
                   @if (nodoForm.requiresForm) {
                     <div class="mt-3 rounded-2xl border border-slate-200 p-3">
@@ -994,6 +1045,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       trueLabel: this.nodoForm.trueLabel,
       falseLabel: this.nodoForm.falseLabel,
       requiresForm,
+      documentPermissions: nodoProceso ? this.normalizeDocumentPermissions(this.nodoForm.documentPermissions) : [],
       formDefinition,
       posX: nodo.posX ?? 0,
       posY: nodo.posY ?? 0
@@ -1005,6 +1057,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
           trueLabel: this.nodoForm.trueLabel,
           falseLabel: this.nodoForm.falseLabel,
           requiresForm,
+          documentPermissions: this.normalizeDocumentPermissions(this.nodoForm.documentPermissions),
           formDefinition: formDefinition ?? undefined
         });
         this.snack.open('Nodo actualizado', '', { duration: 1800 });
@@ -1040,6 +1093,22 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
 
   removeFormField(index: number) {
     this.nodoForm.formFields = this.nodoForm.formFields.filter((_, i) => i !== index).map((field, i) => ({ ...field, order: i + 1 }));
+  }
+
+  addDocumentPermission() {
+    this.nodoForm.documentPermissions = [
+      ...this.nodoForm.documentPermissions,
+      {
+        departmentId: '',
+        canCreate: true,
+        canRead: true,
+        canEdit: false
+      }
+    ];
+  }
+
+  removeDocumentPermission(index: number) {
+    this.nodoForm.documentPermissions = this.nodoForm.documentPermissions.filter((_, i) => i !== index);
   }
 
   onFieldTypeChange(field: FormField, type: FieldType) {
@@ -1767,6 +1836,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       falseLabel: nodo.falseLabel || 'No',
       condition: nodo.condition || '',
       requiresForm: Boolean(nodo.requiresForm),
+      documentPermissions: this.normalizeDocumentPermissions(nodo.documentPermissions),
       formTitle: nodo.formDefinition?.title || 'Formulario',
       formFields: [...(nodo.formDefinition?.fields ?? [])]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -1848,6 +1918,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
           columns: this.normalizeGridColumns(field.columns)
         }))
       } : typed.formDefinition,
+      documentPermissions: this.normalizeDocumentPermissions(typed.documentPermissions),
       responsibleDepartmentName: typed.responsibleDepartmentName || this.departments().find(item => item.id === typed.responsibleDepartmentId)?.name,
       requiresForm: typed.requiresForm ?? false,
       avgMinutes: typed.avgMinutes ?? 1440
@@ -2027,6 +2098,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       falseLabel: 'No',
       condition: '',
       requiresForm: false,
+      documentPermissions: [],
       formTitle: 'Formulario',
       formFields: []
     };
@@ -2057,5 +2129,16 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       return mode;
     }
     return 'none';
+  }
+
+  private normalizeDocumentPermissions(permissions?: Array<Partial<DocumentPermission>> | null): DocumentPermission[] {
+    return [...(permissions ?? [])]
+      .filter(permission => !!permission && typeof permission.departmentId === 'string' && permission.departmentId.trim().length > 0)
+      .map(permission => ({
+        departmentId: permission.departmentId!.trim(),
+        canCreate: Boolean(permission.canCreate),
+        canRead: Boolean(permission.canRead),
+        canEdit: Boolean(permission.canEdit)
+      }));
   }
 }

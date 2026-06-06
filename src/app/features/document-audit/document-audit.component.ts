@@ -9,15 +9,13 @@ import { FormsModule } from '@angular/forms';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
 
-type AuditAction = 'READ' | 'CREATED' | 'UPDATED' | 'DELETED' | 'COLLAB_OPENED' | 'COLLAB_EDITED';
-
 interface DocumentAuditEntry {
   id: string;
   workflowName?: string;
   fieldName?: string;
   fileName?: string;
   storedName?: string;
-  action: AuditAction;
+  action: string;
   userName?: string;
   userEmail?: string;
   departmentName?: string;
@@ -26,15 +24,6 @@ interface DocumentAuditEntry {
   textAfter?: string;
   createdAt: string;
 }
-
-const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: string }> = {
-  READ:          { label: 'Leído',      icon: 'visibility', cls: 'bg-sky-100 text-sky-700' },
-  CREATED:       { label: 'Leído',      icon: 'visibility', cls: 'bg-sky-100 text-sky-700' },
-  UPDATED:       { label: 'Reemplazado', icon: 'swap_horiz', cls: 'bg-amber-100 text-amber-700' },
-  DELETED:       { label: 'Eliminado',  icon: 'delete',     cls: 'bg-rose-100 text-rose-700' },
-  COLLAB_OPENED: { label: 'Leído',      icon: 'visibility', cls: 'bg-sky-100 text-sky-700' },
-  COLLAB_EDITED: { label: 'Editado',    icon: 'edit_note',  cls: 'bg-indigo-100 text-indigo-700' },
-};
 
 @Component({
   selector: 'app-document-audit',
@@ -83,9 +72,9 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
                     <!-- Acción -->
                     <td class="px-4 py-3">
                       <span class="flex w-fit items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
-                            [ngClass]="meta(item.action).cls">
-                        <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">{{ meta(item.action).icon }}</mat-icon>
-                        {{ meta(item.action).label }}
+                            [ngClass]="actionCls()">
+                        <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">{{ actionIcon() }}</mat-icon>
+                        {{ actionLabel(item.action) }}
                       </span>
                     </td>
 
@@ -157,9 +146,13 @@ export class DocumentAuditComponent implements OnInit {
     });
   }
 
-  meta(action: AuditAction) {
-    return ACTION_META[action] ?? { label: action, icon: 'info', cls: 'bg-slate-100 text-slate-700' };
+  actionLabel(action: string): string {
+    return action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
   }
+
+  actionIcon(): string { return 'info'; }
+
+  actionCls(): string { return 'bg-slate-100 text-slate-700'; }
 
   viewDiff(item: DocumentAuditEntry) {
     this.router.navigate(['/document-audit/diff'], { state: { entry: item } });

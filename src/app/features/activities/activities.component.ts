@@ -122,11 +122,37 @@ declare global {
                                 </table>
                               </div>
                             } @else if (isUploadedFile(field.value)) {
-                              <button type="button" class="cursor-pointer border-none bg-transparent p-0 font-inherit text-indigo-600 underline" (click)="downloadFile(field.name, field.value)">{{ uploadedFileName(field.value) }}</button>
+                              <div class="flex items-center gap-2">
+                                <mat-icon class="!h-4 !w-4 !text-base text-slate-400">description</mat-icon>
+                                <span class="flex-1 truncate text-sm text-slate-800">{{ uploadedFileName(field.value) }}</span>
+                                @if (documentAccess().canRead) {
+                                  <button type="button" class="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" (click)="downloadFile(field.name, field.value)">
+                                    <mat-icon class="!h-3.5 !w-3.5 !text-sm">download</mat-icon> Descargar
+                                  </button>
+                                }
+                                @if (documentAccess().canEdit) {
+                                  <button type="button" class="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700" (click)="openInEditor(field.name, asStoredFile(field.value))">
+                                    <mat-icon class="!h-3.5 !w-3.5 !text-sm">edit</mat-icon> Editar
+                                  </button>
+                                }
+                              </div>
                             } @else if (isUploadedFileList(field.value)) {
-                              <div class="flex flex-col gap-1">
+                              <div class="flex flex-col gap-2">
                                 @for (file of toUploadedFiles(field.value); track file.storedName) {
-                                  <button type="button" class="cursor-pointer border-none bg-transparent p-0 text-left font-inherit text-indigo-600 underline" (click)="downloadFile(field.name, file)">{{ uploadedFileName(file) }}</button>
+                                  <div class="flex items-center gap-2">
+                                    <mat-icon class="!h-4 !w-4 !text-base text-slate-400">description</mat-icon>
+                                    <span class="flex-1 truncate text-sm text-slate-800">{{ uploadedFileName(file) }}</span>
+                                    @if (documentAccess().canRead) {
+                                      <button type="button" class="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-600 hover:bg-slate-100" (click)="downloadFile(field.name, file)">
+                                        <mat-icon class="!h-3.5 !w-3.5 !text-sm">download</mat-icon> Descargar
+                                      </button>
+                                    }
+                                    @if (documentAccess().canEdit) {
+                                      <button type="button" class="flex items-center gap-1 rounded-lg bg-indigo-600 px-2 py-1 text-xs font-semibold text-white hover:bg-indigo-700" (click)="openInEditor(field.name, asStoredFile(file))">
+                                        <mat-icon class="!h-3.5 !w-3.5 !text-sm">edit</mat-icon> Editar
+                                      </button>
+                                    }
+                                  </div>
                                 }
                               </div>
                             } @else if (field.type === 'CHECKBOX') {
@@ -446,6 +472,7 @@ export class ActivitiesComponent implements OnInit {
   isUploadedFile(value: unknown): value is UploadedFile { return isStoredFileValue(value); }
   isUploadedFileList(value: unknown): value is UploadedFile[] { return isStoredFileArray(value); }
   uploadedFileName(value: unknown) { return storedFileLabel(value); }
+  asStoredFile(value: unknown): StoredFileValue { return value as StoredFileValue; }
   toUploadedFiles(value: unknown): UploadedFile[] {
     if (this.isUploadedFile(value)) return [value];
     if (this.isUploadedFileList(value)) return value;

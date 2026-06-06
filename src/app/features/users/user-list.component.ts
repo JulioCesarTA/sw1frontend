@@ -75,8 +75,9 @@ interface JobRole {
                     <td class="px-4 py-3">{{ jobRoleName(u.jobRoleId) }}</td>
                     <td class="px-4 py-3">{{ departmentName(u.departmentId) }}</td>
                     <td class="px-4 py-3">{{ companyName(u.companyId) }}</td>
-                    <td class="px-4 py-3">
+                    <td class="px-4 py-3 flex items-center">
                       <button mat-icon-button (click)="openEdit(u)"><mat-icon>edit</mat-icon></button>
+                      <button mat-icon-button color="warn" (click)="delete(u.id, u.name)"><mat-icon>delete</mat-icon></button>
                     </td>
                   </tr>
                 }
@@ -262,6 +263,14 @@ export class UserListComponent implements OnInit {
     request.subscribe({
       next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error', '', { duration: 3000 })
+    });
+  }
+
+  delete(id: string, name: string) {
+    if (!confirm(`¿Eliminar al usuario "${name}"? Esta acción no se puede deshacer.`)) return;
+    this.api.delete(`/users/${id}`).subscribe({
+      next: () => { this.load(); this.snack.open('Usuario eliminado', '', { duration: 2000 }); },
+      error: (err) => this.snack.open(err.error?.message || 'Error al eliminar', '', { duration: 3000 })
     });
   }
 }

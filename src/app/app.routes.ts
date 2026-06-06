@@ -65,8 +65,24 @@ export const routes: Routes = [
         loadComponent: () => import('./features/document-audit/document-audit.component').then(m => m.DocumentAuditComponent)
       },
       {
+        path: 'document-audit/diff',
+        loadComponent: () => import('./features/document-audit/document-audit-diff.component').then(m => m.DocumentAuditDiffComponent)
+      },
+      {
         path: 'collab-docs/:id',
         loadComponent: () => import('./features/collab-docs/collab-editor.component').then(m => m.CollabEditorComponent)
+      },
+      {
+        path: 'report-nlp',
+        loadComponent: () => import('./features/reports-nlp/report-nlp.component').then(m => m.ReportNlpComponent)
+      },
+      {
+        path: 'usuario-pide',
+        loadComponent: () => import('./features/usuario-pide/usuario-pide.component').then(m => m.UsuarioPideComponent)
+      },
+      {
+        path: 'motor-ia',
+        loadComponent: () => import('./features/motor-ia/motor-ia.component').then(m => m.MotorIaComponent)
       }
     ]
   },

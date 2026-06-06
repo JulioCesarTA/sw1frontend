@@ -43,8 +43,9 @@ interface Company { id: string; name: string }
               <div class="flex items-center justify-between">
                 <button mat-stroked-button [routerLink]="[wf.id, 'editor']"><mat-icon>edit</mat-icon> Editor</button>
                 @if (auth.isAdmin()) {
-                  <div>
+                  <div class="flex items-center">
                     <button mat-icon-button (click)="openForm(wf)"><mat-icon>drive_file_rename_outline</mat-icon></button>
+                    <button mat-icon-button color="warn" (click)="delete(wf.id, wf.name)"><mat-icon>delete</mat-icon></button>
                   </div>
                 }
               </div>
@@ -119,6 +120,14 @@ export class WorkflowListComponent implements OnInit {
     req.subscribe({
       next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); },
       error: (err) => this.snack.open(err.error?.message || 'Error al guardar', '', { duration: 3000 })
+    });
+  }
+
+  delete(id: string, name: string) {
+    if (!confirm(`¿Eliminar el workflow "${name}"? Esta acción no se puede deshacer.`)) return;
+    this.api.delete(`/workflows/${id}`).subscribe({
+      next: () => { this.load(); this.snack.open('Workflow eliminado', '', { duration: 2000 }); },
+      error: (err) => this.snack.open(err.error?.message || 'Error al eliminar', '', { duration: 3000 })
     });
   }
 }

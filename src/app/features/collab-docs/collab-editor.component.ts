@@ -91,13 +91,6 @@ const PEER_COLORS = [
             <button (click)="fmt('redo')"  class="toolbar-btn" title="Rehacer"><mat-icon class="!text-[16px]">redo</mat-icon></button>
           </div>
 
-          <!-- Export -->
-          <button (click)="export('word')"  [disabled]="exporting()" class="export-btn bg-blue-600  hover:bg-blue-700"  title="Exportar Word">
-            <mat-icon class="!text-[16px]">description</mat-icon> Word
-          </button>
-          <button (click)="export('excel')" [disabled]="exporting()" class="export-btn bg-green-600 hover:bg-green-700" title="Exportar Excel">
-            <mat-icon class="!text-[16px]">table_chart</mat-icon> Excel
-          </button>
         }
       </div>
 
@@ -126,7 +119,6 @@ export class CollabEditorComponent implements OnInit, AfterViewInit, OnDestroy {
   doc = signal<CollabDocFull | null>(null);
   loading = signal(true);
   connected = signal(false);
-  exporting = signal(false);
   peers = signal<Peer[]>([]);
 
   editor: Editor | null = null;
@@ -137,7 +129,7 @@ export class CollabEditorComponent implements OnInit, AfterViewInit, OnDestroy {
   private myUserName!: string;
   private myColor!: string;
   private saveTimer: any;
-  // Race-condition fix: init puede llegar antes de que cargue el doc
+  private dirty = false;
   private initArrivedEmpty = false;
 
   ngOnInit() {
@@ -221,6 +213,7 @@ export class CollabEditorComponent implements OnInit, AfterViewInit, OnDestroy {
             update: this.toBase64(update),
           }),
         });
+        this.dirty = true;
         this.scheduleSave();
       });
 
@@ -316,14 +309,20 @@ export class CollabEditorComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private persistState() {
-    if (!this.stomp?.connected || !this.ydoc) return;
+    if (!this.stomp?.connected || !this.ydoc || !this.dirty) return;
+    this.dirty = false;
+    clearTimeout(this.saveTimer);
     const state = Y.encodeStateAsUpdate(this.ydoc);
     const text = this.editor?.getText() ?? '';
+    const user = this.auth.user();
     this.stomp.publish({
       destination: `/app/collab-docs/${this.docId}/save-state`,
       body: JSON.stringify({
         ydocState: this.toBase64(state),
         textSnapshot: text,
+        userId: this.myUserId,
+        userName: this.myUserName,
+        userEmail: user?.email ?? '',
       }),
     });
   }
@@ -343,26 +342,6 @@ export class CollabEditorComponent implements OnInit, AfterViewInit, OnDestroy {
       case 'undo':        this.editor.chain().focus().undo().run(); break;
       case 'redo':        this.editor.chain().focus().redo().run(); break;
     }
-  }
-
-  export(format: 'word' | 'excel') {
-    if (!this.editor) return;
-    this.exporting.set(true);
-    const html = this.editor.getHTML();
-    const title = this.doc()?.title ?? 'Documento';
-    this.docService.exportDoc(title, html, format).subscribe({
-      next: (blob) => {
-        const ext = format === 'word' ? 'docx' : 'xlsx';
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${title}.${ext}`;
-        a.click();
-        URL.revokeObjectURL(url);
-        this.exporting.set(false);
-      },
-      error: () => this.exporting.set(false),
-    });
   }
 
   goBack() {

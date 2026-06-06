@@ -6,8 +6,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSelectModule } from '@angular/material/select';
-import { RouterModule } from '@angular/router';
+import { Router, RouterModule } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
 
 type AuditAction = 'READ' | 'CREATED' | 'UPDATED' | 'DELETED' | 'COLLAB_OPENED' | 'COLLAB_EDITED';
@@ -24,23 +23,25 @@ interface DocumentAuditEntry {
   userEmail?: string;
   departmentName?: string;
   comment?: string;
+  textBefore?: string;
+  textAfter?: string;
   createdAt: string;
 }
 
 const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: string }> = {
-  READ:          { label: 'Vista',            icon: 'visibility',    cls: 'bg-sky-100 text-sky-700' },
-  CREATED:       { label: 'Creado',           icon: 'add_circle',    cls: 'bg-emerald-100 text-emerald-700' },
-  UPDATED:       { label: 'Reemplazado',      icon: 'edit',          cls: 'bg-amber-100 text-amber-700' },
-  DELETED:       { label: 'Eliminado',        icon: 'delete',        cls: 'bg-rose-100 text-rose-700' },
-  COLLAB_OPENED: { label: 'Editor abierto',   icon: 'group',         cls: 'bg-violet-100 text-violet-700' },
-  COLLAB_EDITED: { label: 'Edición collab',   icon: 'draw',          cls: 'bg-indigo-100 text-indigo-700' },
+  READ:          { label: 'Leído',      icon: 'visibility', cls: 'bg-sky-100 text-sky-700' },
+  CREATED:       { label: 'Leído',      icon: 'visibility', cls: 'bg-sky-100 text-sky-700' },
+  UPDATED:       { label: 'Reemplazado', icon: 'swap_horiz', cls: 'bg-amber-100 text-amber-700' },
+  DELETED:       { label: 'Eliminado',  icon: 'delete',     cls: 'bg-rose-100 text-rose-700' },
+  COLLAB_OPENED: { label: 'Leído',      icon: 'visibility', cls: 'bg-sky-100 text-sky-700' },
+  COLLAB_EDITED: { label: 'Editado',    icon: 'edit_note',  cls: 'bg-indigo-100 text-indigo-700' },
 };
 
 @Component({
   selector: 'app-document-audit',
   standalone: true,
   imports: [CommonModule, FormsModule, RouterModule, MatCardModule, MatFormFieldModule,
-            MatIconModule, MatInputModule, MatProgressSpinnerModule, MatSelectModule],
+            MatIconModule, MatInputModule, MatProgressSpinnerModule],
   template: `
     <div class="mx-auto max-w-[1400px] p-6">
 
@@ -48,7 +49,7 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
       <div class="mb-6">
         <h2 class="m-0 text-2xl font-bold text-slate-800">Auditoría documental</h2>
         <p class="mt-1 text-[13px] text-slate-500">
-          Historial completo de quién vio, creó, editó o abrió en colaborativo cada documento.
+          Historial de quién leyó o editó cada documento, y qué cambió en cada edición.
         </p>
       </div>
 
@@ -60,28 +61,6 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
           <input matInput [ngModel]="query()" (ngModelChange)="query.set($event)"
                  placeholder="ej. contrato.pdf o julio@empresa.com">
         </mat-form-field>
-
-        <mat-form-field appearance="outline" class="w-52">
-          <mat-label>Filtrar por acción</mat-label>
-          <mat-select [ngModel]="actionFilter()" (ngModelChange)="actionFilter.set($event)">
-            <mat-option value="">Todas las acciones</mat-option>
-            @for (a of allActions; track a.value) {
-              <mat-option [value]="a.value">{{ a.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-
-        <!-- Resumen de conteo por acción -->
-        <div class="flex flex-wrap items-center gap-2 ml-auto">
-          @for (a of allActions; track a.value) {
-            <button (click)="actionFilter.set(actionFilter() === a.value ? '' : a.value)"
-                    class="flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold transition hover:opacity-80"
-                    [ngClass]="a.cls + (actionFilter() === a.value ? ' ring-2 ring-offset-1' : '')">
-              <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">{{ a.icon }}</mat-icon>
-              {{ a.label }} ({{ countByAction(a.value) }})
-            </button>
-          }
-        </div>
       </div>
 
       @if (loading()) {
@@ -99,6 +78,7 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
                   <th class="px-4 py-3">Trámite</th>
                   <th class="px-4 py-3">Usuario</th>
                   <th class="px-4 py-3">Departamento</th>
+                  <th class="px-4 py-3">Cambios</th>
                 </tr>
               </thead>
               <tbody>
@@ -151,10 +131,24 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
 
                     <!-- Departamento -->
                     <td class="px-4 py-3 text-slate-500">{{ item.departmentName || '-' }}</td>
+
+                    <!-- Cambios -->
+                    <td class="px-4 py-3">
+                      @if (item.action === 'COLLAB_EDITED' && (item.textBefore || item.textAfter)) {
+                        <button
+                          class="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition"
+                          (click)="viewDiff(item)">
+                          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">open_in_new</mat-icon>
+                          Ver cambios
+                        </button>
+                      } @else {
+                        <span class="text-slate-300">—</span>
+                      }
+                    </td>
                   </tr>
                 } @empty {
                   <tr>
-                    <td colspan="7" class="px-4 py-12 text-center text-slate-400">
+                    <td colspan="8" class="px-4 py-12 text-center text-slate-400">
                       <mat-icon class="mb-2 !text-4xl text-slate-300">manage_search</mat-icon>
                       <p class="mt-1">No hay eventos documentales registrados.</p>
                     </td>
@@ -174,26 +168,20 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
   `
 })
 export class DocumentAuditComponent implements OnInit {
-  private api = inject(ApiService);
+  private api    = inject(ApiService);
+  private router = inject(Router);
 
   loading = signal(true);
   query = signal('');
-  actionFilter = signal('');
   entries = signal<DocumentAuditEntry[]>([]);
 
-  allActions = Object.entries(ACTION_META).map(([value, m]) => ({
-    value: value as AuditAction, label: m.label, icon: m.icon, cls: m.cls,
-  }));
-
   filteredEntries = computed(() => {
-    const term  = this.query().trim().toLowerCase();
-    const act   = this.actionFilter();
-    return this.entries().filter(item => {
-      if (act && item.action !== act) return false;
-      if (!term) return true;
-      return [item.fileName, item.fieldName, item.workflowName, item.userName, item.userEmail, item.departmentName, item.tramiteId]
-        .some(v => String(v ?? '').toLowerCase().includes(term));
-    });
+    const term = this.query().trim().toLowerCase();
+    if (!term) return this.entries();
+    return this.entries().filter(item =>
+      [item.fileName, item.fieldName, item.workflowName, item.userName, item.userEmail, item.departmentName, item.tramiteId]
+        .some(v => String(v ?? '').toLowerCase().includes(term))
+    );
   });
 
   ngOnInit() {
@@ -207,7 +195,7 @@ export class DocumentAuditComponent implements OnInit {
     return ACTION_META[action] ?? { label: action, icon: 'info', cls: 'bg-slate-100 text-slate-700' };
   }
 
-  countByAction(action: string) {
-    return this.entries().filter(e => e.action === action).length;
+  viewDiff(item: DocumentAuditEntry) {
+    this.router.navigate(['/document-audit/diff'], { state: { entry: item } });
   }
 }

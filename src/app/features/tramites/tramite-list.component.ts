@@ -2,6 +2,7 @@ import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -94,12 +95,23 @@ declare global {
             @else if (entryNodo()) {
               <div class="mb-4 text-sm text-slate-600"><strong>Etapa:</strong> {{ entryNodo()!.name }}</div>
               @if (entryFormFields().length) {
-                <div class="mb-3 flex items-center justify-between gap-3">
+                <div class="mb-3 flex flex-col gap-2">
                   <h4 class="text-sm font-semibold text-slate-900">{{ entryNodo()!.formDefinition?.title || 'Formulario' }}</h4>
-                  <button mat-stroked-button type="button" [disabled]="voiceLoading()" (click)="toggleVoiceCapture()">
-                    <mat-icon>{{ voiceListening() ? 'mic_off' : 'mic' }}</mat-icon>
-                    {{ voiceListening() ? 'Detener voz' : 'Llenar por voz' }}
-                  </button>
+                  <div class="flex flex-wrap gap-2">
+                    <button mat-stroked-button type="button" [disabled]="voiceLoading()" (click)="toggleVoiceCapture()">
+                      <mat-icon>{{ voiceListening() ? 'mic_off' : 'mic' }}</mat-icon>
+                      {{ voiceListening() ? 'Detener voz' : 'Llenar por voz' }}
+                    </button>
+                    <button mat-flat-button color="accent" type="button" [disabled]="tfVoiceLoading()" (click)="toggleTfVoiceCapture()" style="background:#6366f1;color:#fff">
+                      <mat-icon>{{ tfVoiceListening() ? 'mic_off' : 'psychology' }}</mat-icon>
+                      {{ tfVoiceListening() ? 'Detener TF...' : tfVoiceLoading() ? 'Analizando...' : 'Llenar con TF' }}
+                    </button>
+                  </div>
+                  @if (tfVoiceTranscript()) {
+                    <div class="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                      <strong>TF escuchando:</strong> {{ tfVoiceTranscript() }}
+                    </div>
+                  }
                 </div>
                 @for (field of entryFormFields(); track field.id) {
                   @if (field.type === 'FILE') {
@@ -200,6 +212,7 @@ declare global {
 })
 export class TramiteListComponent implements OnInit {
   private api = inject(ApiService);
+  private http = inject(HttpClient);
   private snack = inject(MatSnackBar);
   private auth = inject(AuthService);
 
@@ -217,11 +230,17 @@ export class TramiteListComponent implements OnInit {
   voiceListening = signal(false);
   voiceLoading = signal(false);
   voiceTranscript = signal('');
+  tfVoiceListening = signal(false);
+  tfVoiceLoading = signal(false);
+  tfVoiceTranscript = signal('');
   formWorkflowId = '';
   codeFilter = signal('');
   private speechRecognition: any = null;
+  private tfSpeechRecognition: any = null;
   private shouldApplyVoice = false;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private tfSilenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly NLP_URL = 'http://localhost:8001';
 
   entryFormFields = computed(() => [...(this.entryNodo()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
   filteredTramites = computed(() => {
@@ -423,6 +442,82 @@ export class TramiteListComponent implements OnInit {
       this.restartSilenceTimer();
     };
     this.speechRecognition.start();
+  }
+
+  toggleTfVoiceCapture() {
+    if (this.tfVoiceListening()) {
+      this.tfSpeechRecognition?.stop();
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { this.snack.open('Tu navegador no soporta reconocimiento de voz', '', { duration: 3000 }); return; }
+    if (!this.entryFormFields().length) { this.snack.open('Este workflow no tiene formulario', '', { duration: 2500 }); return; }
+
+    this.tfSpeechRecognition = new SR();
+    this.tfSpeechRecognition.lang = 'es-ES';
+    this.tfSpeechRecognition.continuous = true;
+    this.tfSpeechRecognition.interimResults = true;
+
+    this.tfSpeechRecognition.onstart = () => {
+      this.tfVoiceListening.set(true);
+      this.tfVoiceTranscript.set('');
+    };
+    this.tfSpeechRecognition.onerror = () => {
+      this.tfVoiceListening.set(false);
+      this.snack.open('Error capturando voz', '', { duration: 2500 });
+    };
+    this.tfSpeechRecognition.onresult = (event: any) => {
+      const t = Array.from(event.results ?? [])
+        .map((r: any) => r?.[0]?.transcript || '').join(' ').trim();
+      this.tfVoiceTranscript.set(t);
+      if (this.tfSilenceTimer) clearTimeout(this.tfSilenceTimer);
+      this.tfSilenceTimer = setTimeout(() => {
+        this.tfSpeechRecognition?.stop();
+      }, 5000);
+    };
+    this.tfSpeechRecognition.onend = () => {
+      this.tfVoiceListening.set(false);
+      const transcript = this.tfVoiceTranscript().trim();
+      if (transcript) this.applyTfVoice(transcript);
+    };
+    this.tfSpeechRecognition.start();
+  }
+
+  private applyTfVoice(transcript: string) {
+    this.tfVoiceLoading.set(true);
+    const fields = this.entryFormFields().map(f => ({
+      name: f.name,
+      type: f.type,
+      required: f.required ?? f.isRequired ?? false,
+      columns: f.columns ?? []
+    }));
+    this.http.post<any>(`${this.NLP_URL}/nlp/fill-form`, { transcript, fields })
+      .pipe(finalize(() => this.tfVoiceLoading.set(false)))
+      .subscribe({
+        next: (res) => {
+          if (res.formData && Object.keys(res.formData).length) {
+            const merged: Record<string, unknown> = { ...this.formValues() };
+            for (const [key, val] of Object.entries(res.formData)) {
+              if (Array.isArray(val)) {
+                // GRID: agregar filas a las existentes
+                const existing = Array.isArray(merged[key]) ? (merged[key] as unknown[]) : [];
+                merged[key] = [...existing, ...val];
+              } else {
+                merged[key] = val;
+              }
+            }
+            this.formValues.set(merged);
+            this.snack.open(`TF completó ${res.appliedFields?.length ?? 0} campo(s)`, '', { duration: 3000 });
+          } else {
+            const msg = res.warnings?.length
+              ? res.warnings.join(' | ')
+              : 'TF no detectó valores. Di: "en el campo [nombre] ponele [valor]"';
+            this.snack.open(msg, 'OK', { duration: 6000 });
+          }
+          this.tfVoiceTranscript.set('');
+        },
+        error: () => this.snack.open('Error conectando con servicio TF (puerto 8001)', '', { duration: 3500 })
+      });
   }
 
   save() {

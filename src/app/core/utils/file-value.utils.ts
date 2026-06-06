@@ -1,4 +1,3 @@
-import { environment } from '../../../environments/environment';
 
 export interface StoredFileValue {
   fileName?: string;
@@ -25,15 +24,9 @@ export function storedFileLabel(value: unknown): string {
 }
 
 export function openStoredFileDownload(value: unknown, context?: StoredFileDownloadContext): void {
-  if (!isStoredFileValue(value)) return;
-  const path = value.downloadPath || `/files/${value.storedName}/download`;
-  const params = new URLSearchParams({ filename: storedFileLabel(value) });
-  if (context?.tramiteId) params.set('tramiteId', context.tramiteId);
-  if (context?.fieldName) params.set('fieldName', context.fieldName);
-  const separator = path.includes('?') ? '&' : '?';
-  const url = `${environment.apiUrl}${path}${separator}${params.toString()}`;
+  if (!isStoredFileValue(value) || !value.downloadPath) return;
   const a = document.createElement('a');
-  a.href = url;
+  a.href = value.downloadPath;
   a.download = storedFileLabel(value);
   a.target = '_blank';
   a.rel = 'noopener noreferrer';

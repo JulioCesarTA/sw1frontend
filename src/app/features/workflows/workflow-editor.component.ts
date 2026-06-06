@@ -498,20 +498,10 @@ interface FormVoiceDesignResult {
 
                   <mat-form-field appearance="outline" class="w-full">
                     <mat-label>Departamento</mat-label>
-                    <mat-select [(ngModel)]="nodoForm.responsibleDepartmentId">
+                    <mat-select [(ngModel)]="nodoForm.responsibleDepartmentId" (ngModelChange)="onResponsibleDepartmentChange($event)">
                       <mat-option value="">Sin departamento</mat-option>
                       @for (department of departments(); track department.id) {
                         <mat-option [value]="department.id">{{ department.name }}</mat-option>
-                      }
-                    </mat-select>
-                  </mat-form-field>
-
-                  <mat-form-field appearance="outline" class="w-full">
-                    <mat-label>Cargo</mat-label>
-                    <mat-select [(ngModel)]="nodoForm.responsibleJobRoleId">
-                      <mat-option value="">Sin cargo</mat-option>
-                      @for (role of rolesForDepartment(nodoForm.responsibleDepartmentId); track role.id) {
-                        <mat-option [value]="role.id">{{ role.name }}</mat-option>
                       }
                     </mat-select>
                   </mat-form-field>
@@ -522,45 +512,35 @@ interface FormVoiceDesignResult {
                   </mat-form-field>
 
                   <div class="mt-3 rounded-2xl border border-slate-200 p-3">
-                    <div class="mb-2 flex items-center justify-between gap-3">
-                      <div>
-                        <div class="text-sm font-semibold text-slate-900">Permisos documentales</div>
-                        <div class="text-xs text-slate-500">Define qué departamentos pueden crear, leer o editar archivos en este nodo.</div>
-                      </div>
-                      <button mat-stroked-button type="button" (click)="addDocumentPermission()">
-                        <mat-icon>add</mat-icon> Agregar
-                      </button>
+                    <div class="mb-3">
+                      <div class="text-sm font-semibold text-slate-900">Permisos documentales</div>
+                      <div class="text-xs text-slate-500">Que puede hacer el responsable del nodo con los archivos adjuntos.</div>
                     </div>
-
-                    <div class="grid gap-2">
-                      @for (permission of nodoForm.documentPermissions; track permission.departmentId + '-' + i; let i = $index) {
-                        <div class="rounded-xl border border-slate-200 p-3">
-                          <mat-form-field appearance="outline" class="w-full">
-                            <mat-label>Departamento</mat-label>
-                            <mat-select [(ngModel)]="permission.departmentId">
-                              <mat-option value="">Selecciona un departamento</mat-option>
-                              @for (department of departments(); track department.id) {
-                                <mat-option [value]="department.id">{{ department.name }}</mat-option>
-                              }
-                            </mat-select>
-                          </mat-form-field>
-
+                    @if (nodoForm.responsibleDepartmentId) {
+                      <div class="rounded-xl border border-slate-200 p-3">
+                        <mat-form-field appearance="outline" class="w-full">
+                          <mat-label>Cargo</mat-label>
+                          <mat-select [(ngModel)]="nodoForm.responsibleJobRoleId" (ngModelChange)="onResponsibleJobRoleChange($event)">
+                            <mat-option value="">Sin cargo</mat-option>
+                            @for (role of rolesForDepartment(nodoForm.responsibleDepartmentId); track role.id) {
+                              <mat-option [value]="role.id">{{ role.name }}</mat-option>
+                            }
+                          </mat-select>
+                        </mat-form-field>
+                        @if (nodoForm.responsibleJobRoleId) {
                           <div class="flex flex-wrap gap-3">
-                            <mat-checkbox [(ngModel)]="permission.canCreate">Crear</mat-checkbox>
-                            <mat-checkbox [(ngModel)]="permission.canRead">Leer</mat-checkbox>
-                            <mat-checkbox [(ngModel)]="permission.canEdit">Editar</mat-checkbox>
+                            <mat-checkbox [(ngModel)]="nodoForm.documentPermissions[0].canRead">Leer</mat-checkbox>
+                            <mat-checkbox [(ngModel)]="nodoForm.documentPermissions[0].canEdit">Editar</mat-checkbox>
                           </div>
-
-                          <div class="mt-2 flex justify-end">
-                            <button mat-button color="warn" type="button" (click)="removeDocumentPermission(i)">Quitar</button>
-                          </div>
-                        </div>
-                      } @empty {
-                        <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                          Sin reglas explícitas. Si lo dejas así, el área responsable del nodo conserva acceso documental por compatibilidad.
-                        </div>
-                      }
-                    </div>
+                        } @else {
+                          <div class="text-xs text-slate-400">Selecciona un cargo para configurar permisos.</div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                        Asigna un departamento al nodo para configurar permisos.
+                      </div>
+                    }
                   </div>
 
                   @if (nodoForm.requiresForm) {
@@ -1836,7 +1816,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       falseLabel: nodo.falseLabel || 'No',
       condition: nodo.condition || '',
       requiresForm: Boolean(nodo.requiresForm),
-      documentPermissions: this.normalizeDocumentPermissions(nodo.documentPermissions),
+      documentPermissions: this.initDocumentPermissions(nodo),
       formTitle: nodo.formDefinition?.title || 'Formulario',
       formFields: [...(nodo.formDefinition?.fields ?? [])]
         .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
@@ -2129,6 +2109,41 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       return mode;
     }
     return 'none';
+  }
+
+  departmentName(departmentId: string) {
+    return this.departments().find(d => d.id === departmentId)?.name || '';
+  }
+
+  onResponsibleDepartmentChange(departmentId: string) {
+    this.nodoForm.responsibleJobRoleId = '';
+    this.nodoForm.documentPermissions = [];
+  }
+
+  onResponsibleJobRoleChange(jobRoleId: string) {
+    const existing = this.nodoForm.documentPermissions[0];
+    if (jobRoleId) {
+      this.nodoForm.documentPermissions = [{
+        departmentId: jobRoleId,
+        canCreate: false,
+        canRead: existing?.canRead ?? false,
+        canEdit: existing?.canEdit ?? false
+      }];
+    } else {
+      this.nodoForm.documentPermissions = [];
+    }
+  }
+
+  private initDocumentPermissions(nodo: Nodo): DocumentPermission[] {
+    const jobRoleId = nodo.responsibleJobRoleId || '';
+    if (!jobRoleId) return [];
+    const existing = nodo.documentPermissions?.find(p => p.departmentId === jobRoleId);
+    return [{
+      departmentId: jobRoleId,
+      canCreate: false,
+      canRead: existing?.canRead ?? false,
+      canEdit: existing?.canEdit ?? false
+    }];
   }
 
   private normalizeDocumentPermissions(permissions?: Array<Partial<DocumentPermission>> | null): DocumentPermission[] {

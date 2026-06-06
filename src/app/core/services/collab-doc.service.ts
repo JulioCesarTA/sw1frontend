@@ -52,11 +52,5 @@ export class CollabDocService {
     return this.http.post<CollabDocFull>(`${this.base}/collab-documents/open-file`, params);
   }
 
-  exportDoc(title: string, html: string, format: 'word' | 'excel'): Observable<Blob> {
-    return this.http.post(
-      `${this.base}/collab-documents/export`,
-      { title, html, format },
-      { responseType: 'blob' }
-    );
-  }
+
 }

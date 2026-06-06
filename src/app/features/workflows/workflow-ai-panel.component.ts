@@ -210,12 +210,6 @@ interface BottleneckResult {
   parallelizationOpportunities: string[];
 }
 
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => any;
-    webkitSpeechRecognition?: new () => any;
-  }
-}
 
 @Component({
   selector: 'app-workflow-ai-panel',

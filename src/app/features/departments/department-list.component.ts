@@ -40,8 +40,9 @@ interface Department { id: string; companyId: string; name: string; }
                   <tr class="border-t border-slate-100">
                     <td class="px-4 py-3">{{ department.name }}</td>
                     <td class="px-4 py-3">{{ companyName(department.companyId) }}</td>
-                    <td class="px-4 py-3">
+                    <td class="px-4 py-3 flex items-center">
                       <button mat-icon-button (click)="openEdit(department)"><mat-icon>edit</mat-icon></button>
+                      <button mat-icon-button color="warn" (click)="delete(department.id, department.name)"><mat-icon>delete</mat-icon></button>
                     </td>
                   </tr>
                 } @empty {
@@ -121,6 +122,14 @@ export class DepartmentListComponent implements OnInit {
     req.subscribe({
       next: () => { this.showForm.set(false); this.load(); this.snack.open('Guardado', '', { duration: 2000 }); },
       error: (e) => this.snack.open(e.error?.message || 'Error', '', { duration: 3000 })
+    });
+  }
+
+  delete(id: string, name: string) {
+    if (!confirm(`¿Eliminar el departamento "${name}"? Esta acción no se puede deshacer.`)) return;
+    this.api.delete(`/departments/${id}`).subscribe({
+      next: () => { this.load(); this.snack.open('Departamento eliminado', '', { duration: 2000 }); },
+      error: (e) => this.snack.open(e.error?.message || 'Error al eliminar', '', { duration: 3000 })
     });
   }
 }

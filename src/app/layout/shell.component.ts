@@ -47,10 +47,20 @@ import { AuthService } from '../core/services/auth.service';
               <mat-icon matListItemIcon>assignment</mat-icon>
               <span matListItemTitle>Actividades</span>
             </a>
-            <a mat-list-item routerLink="/workflow-assistant" routerLinkActive="bg-indigo-500/20 text-white"
+            <a mat-list-item routerLink="/report-nlp" routerLinkActive="bg-indigo-500/20 text-white"
               class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
-              <mat-icon matListItemIcon>smart_toy</mat-icon>
-              <span matListItemTitle>Asistente IA</span>
+              <mat-icon matListItemIcon>query_stats</mat-icon>
+              <span matListItemTitle>Prueba de Report NLP</span>
+            </a>
+            <a mat-list-item routerLink="/usuario-pide" routerLinkActive="bg-indigo-500/20 text-white"
+              class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
+              <mat-icon matListItemIcon>record_voice_over</mat-icon>
+              <span matListItemTitle>Usuario Pide</span>
+            </a>
+            <a mat-list-item routerLink="/motor-ia" routerLinkActive="bg-indigo-500/20 text-white"
+              class="mx-2 my-1 rounded-xl text-white/70 transition hover:bg-white/10 hover:text-white">
+              <mat-icon matListItemIcon>psychology</mat-icon>
+              <span matListItemTitle>Motor IA</span>
             </a>
             @if (auth.isSuperAdmin()) {
               <a mat-list-item routerLink="/companies" routerLinkActive="bg-indigo-500/20 text-white"

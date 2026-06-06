@@ -506,6 +506,18 @@ interface FormVoiceDesignResult {
                     </mat-select>
                   </mat-form-field>
 
+                  @if (nodoForm.responsibleDepartmentId) {
+                    <mat-form-field appearance="outline" class="w-full">
+                      <mat-label>Cargo</mat-label>
+                      <mat-select [(ngModel)]="nodoForm.responsibleJobRoleId" (ngModelChange)="onResponsibleJobRoleChange($event)">
+                        <mat-option value="">Sin cargo</mat-option>
+                        @for (role of rolesForDepartment(nodoForm.responsibleDepartmentId); track role.id) {
+                          <mat-option [value]="role.id">{{ role.name }}</mat-option>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  }
+
                   <mat-form-field appearance="outline" class="w-full">
                     <mat-label>Promedio en minutos</mat-label>
                     <input matInput type="number" min="1" [(ngModel)]="nodoForm.avgMinutes">
@@ -516,30 +528,13 @@ interface FormVoiceDesignResult {
                       <div class="text-sm font-semibold text-slate-900">Permisos documentales</div>
                       <div class="text-xs text-slate-500">Que puede hacer el responsable del nodo con los archivos adjuntos.</div>
                     </div>
-                    @if (nodoForm.responsibleDepartmentId) {
-                      <div class="rounded-xl border border-slate-200 p-3">
-                        <mat-form-field appearance="outline" class="w-full">
-                          <mat-label>Cargo</mat-label>
-                          <mat-select [(ngModel)]="nodoForm.responsibleJobRoleId" (ngModelChange)="onResponsibleJobRoleChange($event)">
-                            <mat-option value="">Sin cargo</mat-option>
-                            @for (role of rolesForDepartment(nodoForm.responsibleDepartmentId); track role.id) {
-                              <mat-option [value]="role.id">{{ role.name }}</mat-option>
-                            }
-                          </mat-select>
-                        </mat-form-field>
-                        @if (nodoForm.responsibleJobRoleId) {
-                          <div class="flex flex-wrap gap-3">
-                            <mat-checkbox [(ngModel)]="nodoForm.documentPermissions[0].canRead">Leer</mat-checkbox>
-                            <mat-checkbox [(ngModel)]="nodoForm.documentPermissions[0].canEdit">Editar</mat-checkbox>
-                          </div>
-                        } @else {
-                          <div class="text-xs text-slate-400">Selecciona un cargo para configurar permisos.</div>
-                        }
+                    @if (nodoForm.responsibleJobRoleId) {
+                      <div class="flex flex-wrap gap-3">
+                        <mat-checkbox [(ngModel)]="nodoForm.documentPermissions[0].canRead">Leer</mat-checkbox>
+                        <mat-checkbox [(ngModel)]="nodoForm.documentPermissions[0].canEdit">Editar</mat-checkbox>
                       </div>
                     } @else {
-                      <div class="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-500">
-                        Asigna un departamento al nodo para configurar permisos.
-                      </div>
+                      <div class="text-xs text-slate-400">Selecciona un cargo para configurar permisos.</div>
                     }
                   </div>
 

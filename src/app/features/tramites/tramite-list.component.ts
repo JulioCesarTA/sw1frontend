@@ -1,6 +1,6 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { MatCardModule } from '@angular/material/card';
@@ -16,6 +16,7 @@ import { finalize } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { isStoredFileArray, isStoredFileValue, openStoredFileDownload, storedFileLabel } from '../../core/utils/file-value.utils';
+import { environment } from '../../../environments/environment';
 
 interface Tramite { id: string; code: string; title: string; description?: string; status: string; workflowId: string; createdAt: string }
 interface Workflow { id: string; name: string }
@@ -211,10 +212,11 @@ declare global {
   `
 })
 export class TramiteListComponent implements OnInit {
-  private api = inject(ApiService);
-  private http = inject(HttpClient);
+  private api   = inject(ApiService);
+  private http  = inject(HttpClient);
   private snack = inject(MatSnackBar);
-  private auth = inject(AuthService);
+  private auth  = inject(AuthService);
+  private router = inject(Router);
 
   tramites = signal<Tramite[]>([]);
   workflows = signal<Workflow[]>([]);
@@ -240,7 +242,7 @@ export class TramiteListComponent implements OnInit {
   private shouldApplyVoice = false;
   private silenceTimer: ReturnType<typeof setTimeout> | null = null;
   private tfSilenceTimer: ReturnType<typeof setTimeout> | null = null;
-  private readonly NLP_URL = 'http://localhost:8001';
+  private readonly NLP_URL = `${environment.apiUrl}/workflow-ai`;
 
   entryFormFields = computed(() => [...(this.entryNodo()?.formDefinition?.fields ?? [])].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
   filteredTramites = computed(() => {
@@ -249,8 +251,16 @@ export class TramiteListComponent implements OnInit {
   });
 
   ngOnInit() {
+    const navWorkflowId: string | undefined = this.router.lastSuccessfulNavigation?.extras?.state?.['workflowId'];
     this.api.get<Tramite[]>('/tramites').subscribe({ next: p => { this.tramites.set(p); this.loading.set(false); }, error: () => this.loading.set(false) });
-    this.api.get<Workflow[]>('/workflows').subscribe({ next: w => this.workflows.set(w) });
+    this.api.get<Workflow[]>('/workflows').subscribe({ next: w => {
+      this.workflows.set(w);
+      if (navWorkflowId && w.find(wf => wf.id === navWorkflowId)) {
+        this.openCreate();
+        this.formWorkflowId = navWorkflowId;
+        this.onWorkflowChange(navWorkflowId);
+      }
+    }});
   }
 
   statusClass(s: string) {
@@ -516,7 +526,7 @@ export class TramiteListComponent implements OnInit {
           }
           this.tfVoiceTranscript.set('');
         },
-        error: () => this.snack.open('Error conectando con servicio TF (puerto 8001)', '', { duration: 3500 })
+        error: () => this.snack.open('Error conectando con el servidor', '', { duration: 3500 })
       });
   }
 

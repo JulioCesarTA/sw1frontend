@@ -80,10 +80,6 @@ export const routes: Routes = [
         path: 'usuario-pide',
         loadComponent: () => import('./features/usuario-pide/usuario-pide.component').then(m => m.UsuarioPideComponent)
       },
-      {
-        path: 'motor-ia',
-        loadComponent: () => import('./features/motor-ia/motor-ia.component').then(m => m.MotorIaComponent)
-      }
     ]
   },
   { path: '**', redirectTo: '' }

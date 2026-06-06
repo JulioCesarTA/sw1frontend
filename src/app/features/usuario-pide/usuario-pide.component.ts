@@ -2,34 +2,12 @@ import { Component, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { environment } from '../../../environments/environment';
 
-const NLP_URL = 'http://localhost:8001';
 
-const DOC_TYPE_LABELS: Record<string, string> = {
-  DNI:          'DNI / Cédula',
-  FACTURA:      'Factura de servicios',
-  CONTRATO:     'Contrato',
-  ESCRITURA:    'Escritura de propiedad',
-  COMPROBANTE:  'Comprobante',
-  CERTIFICADO:  'Certificado',
-  FOTO_MEDIDOR: 'Foto de medidor',
-  SOLICITUD:    'Carta / Solicitud',
-  OTRO:         'Otro documento',
-};
-
-const DOC_TYPE_ICON: Record<string, string> = {
-  DNI:          'badge',
-  FACTURA:      'receipt_long',
-  CONTRATO:     'description',
-  ESCRITURA:    'home',
-  COMPROBANTE:  'task_alt',
-  CERTIFICADO:  'verified',
-  FOTO_MEDIDOR: 'photo_camera',
-  SOLICITUD:    'mail',
-  OTRO:         'insert_drive_file',
-};
 
 interface AnalyzedDoc {
   filename:     string;
@@ -146,7 +124,7 @@ interface WorkflowMatch {
                   <div class="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2">
                     <div class="flex items-center gap-2 min-w-0">
                       <mat-icon class="shrink-0 !text-[20px] text-indigo-400">
-                        {{ fileIcon(f.name) }}
+                        {{ fileIcon() }}
                       </mat-icon>
                       <div class="min-w-0">
                         <p class="truncate text-xs font-medium text-slate-700">{{ f.name }}</p>
@@ -199,7 +177,7 @@ interface WorkflowMatch {
                 @for (doc of analyzedDocs(); track doc.filename) {
                   <div class="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
                     <mat-icon class="shrink-0 !text-[22px] text-indigo-500 mt-0.5">
-                      {{ docTypeIcon(doc.detectedType) }}
+                      {{ docTypeIcon() }}
                     </mat-icon>
                     <div class="flex-1 min-w-0">
                       <div class="flex items-center justify-between gap-2">
@@ -379,7 +357,7 @@ export class UsuarioPideComponent implements OnDestroy {
   userText      = '';
   selectedFiles: File[] = [];
 
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private router: Router) {}
 
   // ---------------------------------------------------------------- //
   // Archivos
@@ -430,7 +408,7 @@ export class UsuarioPideComponent implements OnDestroy {
     for (const f of this.selectedFiles) form.append('files', f, f.name);
 
     this.http.post<{ documents: AnalyzedDoc[]; matches: WorkflowMatch[] }>(
-      `${NLP_URL}/nlp/match-with-docs`, form
+      `${environment.apiUrl}/workflow-ai/match-with-docs`, form
     ).subscribe({
       next: (res) => {
         this.analyzedDocs.set(res.documents);
@@ -441,7 +419,7 @@ export class UsuarioPideComponent implements OnDestroy {
         this.loading.set(false);
         this.error.set(
           err.status === 0
-            ? 'No se pudo conectar al servicio NLP (localhost:8001). ¿Está corriendo?'
+            ? 'No se pudo conectar al servidor. ¿Está corriendo el backend?'
             : `Error ${err.status}: ${err.error?.detail ?? 'Error desconocido'}`
         );
       },
@@ -449,7 +427,7 @@ export class UsuarioPideComponent implements OnDestroy {
   }
 
   iniciarTramite(m: WorkflowMatch) {
-    alert(`Iniciando trámite con workflow:\n"${m.workflowName}"`);
+    this.router.navigate(['/tramites'], { state: { workflowId: m.workflowId } });
   }
 
   // ---------------------------------------------------------------- //
@@ -478,17 +456,13 @@ export class UsuarioPideComponent implements OnDestroy {
 
   private stopRecording() { this.recognition?.stop(); this.recording.set(false); }
 
-  // ---------------------------------------------------------------- //
-  // Helpers UI
-  // ---------------------------------------------------------------- //
-  fileIcon(name: string) {
-    if (/\.docx$/i.test(name)) return 'description';
-    if (/\.pdf$/i.test(name))  return 'picture_as_pdf';
-    return 'insert_drive_file';
+  fileIcon() { return 'insert_drive_file'; }
+
+  docTypeLabel(t: string) {
+    return t.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
   }
 
-  docTypeLabel(t: string) { return DOC_TYPE_LABELS[t] ?? t; }
-  docTypeIcon(t: string)  { return DOC_TYPE_ICON[t] ?? 'insert_drive_file'; }
+  docTypeIcon() { return 'insert_drive_file'; }
 
   scoreColor(s: number)    { return s >= 70 ? 'text-emerald-600' : s >= 40 ? 'text-amber-500' : 'text-slate-400'; }
   scoreBarColor(s: number) { return s >= 70 ? 'bg-emerald-500'   : s >= 40 ? 'bg-amber-400'   : 'bg-slate-300'; }

@@ -1,20 +1,19 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { Component, OnInit, inject, signal } from '@angular/core';
 import { MatCardModule } from '@angular/material/card';
-import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterModule } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
+import { FormsModule } from '@angular/forms';
+import { MatInputModule } from '@angular/material/input';
+import { MatFormFieldModule } from '@angular/material/form-field';
 
 type AuditAction = 'READ' | 'CREATED' | 'UPDATED' | 'DELETED' | 'COLLAB_OPENED' | 'COLLAB_EDITED';
 
 interface DocumentAuditEntry {
   id: string;
   workflowName?: string;
-  tramiteId?: string;
   fieldName?: string;
   fileName?: string;
   storedName?: string;
@@ -53,15 +52,6 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
         </p>
       </div>
 
-      <!-- Filtros -->
-      <div class="mb-4 flex flex-wrap gap-3">
-        <mat-form-field appearance="outline" class="w-72">
-          <mat-label>Buscar documento, usuario o workflow</mat-label>
-          <mat-icon matPrefix class="mr-1 text-slate-400">search</mat-icon>
-          <input matInput [ngModel]="query()" (ngModelChange)="query.set($event)"
-                 placeholder="ej. contrato.pdf o julio@empresa.com">
-        </mat-form-field>
-      </div>
 
       @if (loading()) {
         <div class="flex justify-center p-10"><mat-spinner /></div>
@@ -75,14 +65,13 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
                   <th class="px-4 py-3">Acción</th>
                   <th class="px-4 py-3">Documento</th>
                   <th class="px-4 py-3">Workflow</th>
-                  <th class="px-4 py-3">Trámite</th>
                   <th class="px-4 py-3">Usuario</th>
                   <th class="px-4 py-3">Departamento</th>
                   <th class="px-4 py-3">Cambios</th>
                 </tr>
               </thead>
               <tbody>
-                @for (item of filteredEntries(); track item.id) {
+                @for (item of entries(); track item.id) {
                   <tr class="border-t border-slate-100 hover:bg-slate-50 transition-colors">
 
                     <!-- Fecha -->
@@ -103,7 +92,7 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
                     <!-- Documento -->
                     <td class="max-w-[200px] px-4 py-3">
                       <div class="truncate font-medium text-slate-800" [title]="item.fileName || ''">
-                        {{ item.fileName || '-' }}
+                        {{ (item.fileName || '-').replace('.docx.docx', '.docx') }}
                       </div>
                       @if (item.fieldName && item.fieldName !== 'collab') {
                         <div class="truncate text-xs text-slate-400">Campo: {{ item.fieldName }}</div>
@@ -113,15 +102,6 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
                     <!-- Workflow -->
                     <td class="px-4 py-3 text-slate-500">{{ item.workflowName || '-' }}</td>
 
-                    <!-- Trámite -->
-                    <td class="px-4 py-3">
-                      @if (item.tramiteId) {
-                        <a [routerLink]="['/actividades']" [queryParams]="{ tramiteId: item.tramiteId }"
-                           class="font-mono text-xs text-indigo-600 hover:underline" [title]="item.tramiteId">
-                          {{ item.tramiteId | slice:0:8 }}…
-                        </a>
-                      } @else { <span class="text-slate-400">-</span> }
-                    </td>
 
                     <!-- Usuario -->
                     <td class="px-4 py-3">
@@ -158,10 +138,6 @@ const ACTION_META: Record<AuditAction, { label: string; icon: string; cls: strin
             </table>
           </div>
 
-          <!-- Footer con total -->
-          <div class="border-t border-slate-100 px-4 py-2 text-right text-xs text-slate-400">
-            {{ filteredEntries().length }} evento(s) mostrado(s) de {{ entries().length }} total
-          </div>
         </mat-card>
       }
     </div>
@@ -172,17 +148,7 @@ export class DocumentAuditComponent implements OnInit {
   private router = inject(Router);
 
   loading = signal(true);
-  query = signal('');
   entries = signal<DocumentAuditEntry[]>([]);
-
-  filteredEntries = computed(() => {
-    const term = this.query().trim().toLowerCase();
-    if (!term) return this.entries();
-    return this.entries().filter(item =>
-      [item.fileName, item.fieldName, item.workflowName, item.userName, item.userEmail, item.departmentName, item.tramiteId]
-        .some(v => String(v ?? '').toLowerCase().includes(term))
-    );
-  });
 
   ngOnInit() {
     this.api.get<DocumentAuditEntry[]>('/document-audit').subscribe({

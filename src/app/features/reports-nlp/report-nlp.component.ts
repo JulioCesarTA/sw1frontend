@@ -4,8 +4,7 @@ import { HttpClient } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-
-const NLP_URL = 'http://localhost:8001';
+import { environment } from '../../../environments/environment';
 
 const COLUMN_LABELS: Record<string, string> = {
   tramiteId:      'ID',
@@ -236,7 +235,7 @@ export class ReportNlpComponent implements OnDestroy {
     this.error.set('');
     this.result.set(null);
 
-    this.http.post<ReportResult>(`${NLP_URL}/nlp/report-generate`, { prompt: this.prompt.trim() })
+    this.http.post<ReportResult>(`${environment.apiUrl}/workflow-ai/nlp/report-generate`, { prompt: this.prompt.trim() })
       .subscribe({
         next: (res) => {
           // Flatten grouped data for table display
@@ -250,7 +249,7 @@ export class ReportNlpComponent implements OnDestroy {
           this.loading.set(false);
           this.error.set(
             err.status === 0
-              ? 'No se pudo conectar al servicio NLP (localhost:8001).'
+              ? 'No se pudo conectar al servidor. ¿Está corriendo el backend?'
               : `Error ${err.status}: ${err.error?.detail ?? 'Error desconocido'}`
           );
         },
@@ -260,7 +259,7 @@ export class ReportNlpComponent implements OnDestroy {
   download(format: 'word' | 'excel') {
     if (!this.result()) return;
     const spec = this.result()!.spec;
-    this.http.post(`${NLP_URL}/nlp/download`, { spec, format }, { responseType: 'blob' })
+    this.http.post(`${environment.apiUrl}/workflow-ai/nlp/download`, { spec, format }, { responseType: 'blob' })
       .subscribe({
         next: (blob) => {
           const ext = format === 'word' ? 'docx' : 'xlsx';

@@ -154,7 +154,28 @@ interface ResolvedNodoField extends FormField {
   originNodoName: string;
 }
 
-type SidebarTab = 'inspector' | 'diagram-ai' | 'worky' | 'bottleneck';
+type SidebarTab = 'inspector' | 'priority' | 'anomaly';
+
+interface PriorityTramite {
+  id: string; code: string; title: string; status: string;
+  elapsedHours: number; expectedHours: number;
+  urgencyScore: number; urgencyLevel: string; rank: number;
+}
+interface PriorityResult {
+  workflowId: string; workflowName: string; trainedOn: number;
+  total: number; ranked: PriorityTramite[];
+}
+interface AnomalyTramite {
+  id: string; code: string; title: string; status: string;
+  elapsedHours: number; expectedHours: number;
+  anomalyScore: number; reconstructionError: number;
+  threshold: number; isAnomaly: boolean; mainFactor: string; factorDetail?: string;
+}
+interface AnomalyResult {
+  workflowId: string; workflowName: string; trainedOn: number;
+  threshold: number; total: number; totalAnomalies: number;
+  anomalies: AnomalyTramite[]; normal: AnomalyTramite[];
+}
 
 interface DiagramAiAction {
   type: 'create_nodo' | 'update_nodo' | 'delete_nodo' | 'connect_nodo' | 'disconnect_nodo' | 'create_department' | 'create_job_role' | 'show_diagram';
@@ -432,23 +453,19 @@ interface FormVoiceDesignResult {
             </section>
 
             <aside class="rounded-[22px] border border-slate-200 bg-white p-[18px] shadow-[0_8px_30px_rgba(15,23,42,.05)]">
-              <div class="mb-4 grid grid-cols-4 gap-2 rounded-2xl bg-slate-100 p-1">
+              <div class="mb-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
                 <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
                         [class.bg-white]="sidebarTab() === 'inspector'"
                         [class.text-indigo-700]="sidebarTab() === 'inspector'"
                         (click)="sidebarTab.set('inspector')">Inspector</button>
                 <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
-                        [class.bg-white]="sidebarTab() === 'diagram-ai'"
-                        [class.text-indigo-700]="sidebarTab() === 'diagram-ai'"
-                        (click)="sidebarTab.set('diagram-ai')">IA</button>
+                        [class.bg-white]="sidebarTab() === 'priority'"
+                        [class.text-indigo-700]="sidebarTab() === 'priority'"
+                        (click)="sidebarTab.set('priority')">Prioridad</button>
                 <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
-                        [class.bg-white]="sidebarTab() === 'worky'"
-                        [class.text-indigo-700]="sidebarTab() === 'worky'"
-                        (click)="sidebarTab.set('worky')">Worky</button>
-                <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
-                        [class.bg-white]="sidebarTab() === 'bottleneck'"
-                        [class.text-indigo-700]="sidebarTab() === 'bottleneck'"
-                        (click)="sidebarTab.set('bottleneck')">Analisis</button>
+                        [class.bg-white]="sidebarTab() === 'anomaly'"
+                        [class.text-indigo-700]="sidebarTab() === 'anomaly'"
+                        (click)="sidebarTab.set('anomaly')">Anomalías</button>
               </div>
 
               @if (sidebarTab() === 'inspector' && selectedNodo()) {
@@ -693,20 +710,76 @@ interface FormVoiceDesignResult {
                     <button mat-flat-button color="primary" (click)="saveTransition()">Guardar conexion</button>
                   </div>
                 </div>
-              } @else if (sidebarTab() === 'diagram-ai' || sidebarTab() === 'worky' || sidebarTab() === 'bottleneck') {
-                <app-workflow-ai-panel
-                  [activeTab]="sidebarTab()"
-                  [workflowId]="workflow()?.id || ''"
-                  [workflowName]="workflow()?.name || ''"
-                  [nodo]="workflow()?.nodo || []"
-                  [transitions]="workflow()?.transitions || []"
-                  [departments]="departments()"
-                  [jobRoles]="jobRoles()"
-                  [selectedNodo]="selectedNodo()"
-                  [applyAiActions]="applyAiActionsBound"
-                  [applyVoiceFormPatch]="applyVoiceFormPatchBound"
-                  [onError]="showAiError">
-                </app-workflow-ai-panel>
+              } @else if (sidebarTab() === 'priority') {
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="m-0 text-lg text-slate-950">Prioridad</h3>
+                    <button mat-stroked-button [disabled]="priorityLoading() || !workflow()?.id" (click)="runPriorityAnalysis()">
+                      @if (priorityLoading()) { <mat-spinner diameter="16" /> } @else { <mat-icon>bolt</mat-icon> }
+                      Entrenar
+                    </button>
+                  </div>
+                  @if (!workflow()?.id) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Guarda el workflow primero.</div>
+                  } @else if (priorityLoading()) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">Entrenando modelo…</div>
+                  } @else if (priorityResult()) {
+                    <div class="text-xs text-slate-500">Entrenado con {{ priorityResult()!.trainedOn }} trámites · {{ priorityResult()!.total }} activos</div>
+                    @if (!priorityResult()!.ranked.length) {
+                      <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Sin trámites activos en este workflow.</div>
+                    }
+                    @for (t of priorityResult()!.ranked; track t.id) {
+                      <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                        <div class="flex items-start justify-between gap-2">
+                          <div>
+                            <div class="text-sm font-semibold text-slate-800">{{ t.code }}</div>
+                            @if (t.title) { <div class="mt-0.5 text-xs text-slate-500">{{ t.title }}</div> }
+                          </div>
+                          <span class="shrink-0 rounded-full bg-slate-800 px-2.5 py-0.5 text-sm font-bold tabular-nums text-white">{{ (t.urgencyScore * 100).toFixed(0) }}%</span>
+                        </div>
+                        <div class="mt-2 text-xs text-slate-500">Abierto hace {{ formatHours(t.elapsedHours) }} &nbsp;·&nbsp; Debió cerrarse en {{ formatHours(t.expectedHours) }}</div>
+                        <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                          <div class="h-full rounded-full bg-slate-800 transition-all" [style.width.%]="t.urgencyScore * 100"></div>
+                        </div>
+                      </div>
+                    }
+                  } @else {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Presiona Entrenar para analizar los trámites activos.</div>
+                  }
+                </div>
+              } @else if (sidebarTab() === 'anomaly') {
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="m-0 text-lg text-slate-950">Anomalías</h3>
+                    <button mat-stroked-button [disabled]="anomalyLoading() || !workflow()?.id" (click)="runAnomalyAnalysis()">
+                      @if (anomalyLoading()) { <mat-spinner diameter="16" /> } @else { <mat-icon>radar</mat-icon> }
+                      Entrenar
+                    </button>
+                  </div>
+                  @if (!workflow()?.id) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Guarda el workflow primero.</div>
+                  } @else if (anomalyLoading()) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">Entrenando autoencoder…</div>
+                  } @else if (anomalyResult()) {
+                    <div class="text-xs text-slate-500">Entrenado con {{ anomalyResult()!.trainedOn }} trámites normales</div>
+                    @if (anomalyResult()!.totalAnomalies) {
+                      <div class="mb-1 text-xs font-semibold text-red-600">{{ anomalyResult()!.totalAnomalies }} anomalía(s) detectada(s)</div>
+                      @for (a of anomalyResult()!.anomalies; track a.id) {
+                        <div class="rounded-2xl border border-slate-200 bg-white p-3">
+                          <div class="text-sm font-semibold text-slate-800">{{ a.code }}</div>
+                          @if (a.title) { <div class="mt-0.5 text-xs text-slate-500">{{ a.title }}</div> }
+                          <div class="mt-1.5 text-xs text-slate-600">{{ a.factorDetail ?? (formatHours(a.elapsedHours) + ' abierto · esperado ' + formatHours(a.expectedHours)) }}</div>
+                        </div>
+                      }
+                    } @else if (anomalyResult()!.total) {
+                      <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Sin anomalías detectadas.</div>
+                    } @else {
+                      <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Sin trámites activos en este workflow.</div>
+                    }
+                  } @else {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Presiona Entrenar para detectar comportamientos anómalos.</div>
+                  }
+                </div>
               } @else {
                 <h3 class="m-0 mb-3 text-lg text-slate-950">Inspector</h3>
                 <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
@@ -770,6 +843,10 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   selectedTransitionId = signal<string | null>(null);
   connectingFromId = signal<string | null>(null);
   sidebarTab = signal<SidebarTab>('inspector');
+  priorityLoading = signal(false);
+  priorityResult  = signal<PriorityResult | null>(null);
+  anomalyLoading  = signal(false);
+  anomalyResult   = signal<AnomalyResult | null>(null);
   readonly applyAiActionsBound = (actions: DiagramAiAction[]) => this.applyAiActions(actions);
   readonly applyVoiceFormPatchBound = (result: FormVoiceDesignResult) => this.applyVoiceFormPatch(result);
   readonly showAiError = (message: string) => this.snack.open(message, '', { duration: 3500 });
@@ -2150,5 +2227,64 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
         canRead: Boolean(permission.canRead),
         canEdit: Boolean(permission.canEdit)
       }));
+  }
+
+  async runPriorityAnalysis() {
+    const wfId = this.workflow()?.id;
+    if (!wfId || this.priorityLoading()) return;
+    this.priorityLoading.set(true);
+    try {
+      const result = await firstValueFrom(
+        this.api.post<PriorityResult>(`/workflow-ai/nlp/rank-priority-real/${wfId}`, {})
+      );
+      this.priorityResult.set(result);
+    } catch {
+      this.snack.open('No se pudo obtener prioridades', '', { duration: 3000 });
+    } finally {
+      this.priorityLoading.set(false);
+    }
+  }
+
+  async runAnomalyAnalysis() {
+    const wfId = this.workflow()?.id;
+    if (!wfId || this.anomalyLoading()) return;
+    this.anomalyLoading.set(true);
+    try {
+      const result = await firstValueFrom(
+        this.api.post<AnomalyResult>(`/workflow-ai/nlp/detect-anomalies/${wfId}`, {})
+      );
+      this.anomalyResult.set(result);
+    } catch {
+      this.snack.open('No se pudo analizar anomalías', '', { duration: 3000 });
+    } finally {
+      this.anomalyLoading.set(false);
+    }
+  }
+
+  urgencyColor(level: string): string {
+    switch (level) {
+      case 'CRITICAL': return 'text-red-700 bg-red-50 border-red-200';
+      case 'HIGH':     return 'text-orange-700 bg-orange-50 border-orange-200';
+      case 'MEDIUM':   return 'text-yellow-700 bg-yellow-50 border-yellow-200';
+      default:         return 'text-slate-600 bg-slate-50 border-slate-200';
+    }
+  }
+
+  anomalyFactorLabel(factor: string): string {
+    const map: Record<string, string> = {
+      elapsed_ratio:       'Tiempo total excedido',
+      nodo_position_ratio: 'Posición en el flujo',
+      time_in_nodo_ratio:  'Tiempo en nodo actual',
+      hour_of_day:         'Hora inusual',
+      day_of_week:         'Día inusual',
+      wf_load:             'Carga del workflow',
+    };
+    return map[factor] ?? factor;
+  }
+
+  formatHours(h: number): string {
+    if (h >= 24) return `${(h / 24).toFixed(1)} d`;
+    if (h >= 1)  return `${h.toFixed(1)} h`;
+    return `${Math.round(h * 60)} min`;
   }
 }

@@ -47,9 +47,7 @@ interface ReportResult {
       <!-- Header -->
       <div>
         <h2 class="m-0 text-2xl font-bold text-slate-800">Reportes</h2>
-        <p class="mt-1 text-sm text-slate-500">
-          Describí el reporte que necesitás. Podés incluir departamento, workflow, fechas, estado, formato (pantalla / word / excel), cómo ordenar y cómo agrupar.
-        </p>
+      
       </div>
 
       <!-- Input card -->
@@ -135,18 +133,8 @@ interface ReportResult {
         <!-- Tabla -->
         @if (result()!.data.length) {
           <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-5 py-3">
+            <div class="flex items-center border-b border-slate-100 bg-slate-50 px-5 py-3">
               <span class="font-semibold text-slate-700">{{ result()!.spec.title }}</span>
-              <div class="flex gap-2">
-                <button (click)="download('word')"
-                  class="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100">
-                  <mat-icon class="!h-4 !w-4 !text-[16px]">description</mat-icon> Word
-                </button>
-                <button (click)="download('excel')"
-                  class="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100">
-                  <mat-icon class="!h-4 !w-4 !text-[16px]">table_chart</mat-icon> Excel
-                </button>
-              </div>
             </div>
             <div class="overflow-x-auto">
               <table class="min-w-full text-sm">
@@ -235,41 +223,44 @@ export class ReportNlpComponent implements OnDestroy {
     this.error.set('');
     this.result.set(null);
 
-    this.http.post<ReportResult>(`${environment.apiUrl}/workflow-ai/nlp/report-generate`, { prompt: this.prompt.trim() })
-      .subscribe({
-        next: (res) => {
-          // Flatten grouped data for table display
-          if (res.spec.groupBy && res.data.length) {
-            res.data = this.flattenGroups(res.data, res.spec.groupBy);
-          }
-          this.result.set(res);
-          this.loading.set(false);
-        },
-        error: (err) => {
-          this.loading.set(false);
-          this.error.set(
-            err.status === 0
-              ? 'No se pudo conectar al servidor. ¿Está corriendo el backend?'
-              : `Error ${err.status}: ${err.error?.detail ?? 'Error desconocido'}`
-          );
-        },
-      });
-  }
+    this.http.post(
+      `${environment.apiUrl}/workflow-ai/nlp/report-generate`,
+      { prompt: this.prompt.trim() },
+      { responseType: 'blob', observe: 'response' }
+    ).subscribe({
+      next: (response) => {
+        this.loading.set(false);
+        const contentType = response.headers.get('Content-Type') ?? '';
+        const blob = response.body!;
 
-  download(format: 'word' | 'excel') {
-    if (!this.result()) return;
-    const spec = this.result()!.spec;
-    this.http.post(`${environment.apiUrl}/workflow-ai/nlp/download`, { spec, format }, { responseType: 'blob' })
-      .subscribe({
-        next: (blob) => {
-          const ext = format === 'word' ? 'docx' : 'xlsx';
+        if (contentType.includes('application/json')) {
+          // Pantalla: parsear JSON y mostrar tabla
+          blob.text().then(text => {
+            const res: ReportResult = JSON.parse(text);
+            if (res.spec.groupBy && res.data.length) {
+              res.data = this.flattenGroups(res.data, res.spec.groupBy);
+            }
+            this.result.set(res);
+          });
+        } else {
+          // Word o Excel: descargar automáticamente
+          const isWord = contentType.includes('wordprocessingml');
+          const ext = isWord ? 'docx' : 'xlsx';
           const url = URL.createObjectURL(blob);
           const a   = document.createElement('a');
           a.href = url; a.download = `reporte.${ext}`; a.click();
           URL.revokeObjectURL(url);
-        },
-        error: () => this.error.set('Error al generar el archivo.'),
-      });
+        }
+      },
+      error: (err) => {
+        this.loading.set(false);
+        this.error.set(
+          err.status === 0
+            ? 'No se pudo conectar al servidor. ¿Está corriendo el backend?'
+            : `Error ${err.status}: ${err.error?.detail ?? 'Error desconocido'}`
+        );
+      },
+    });
   }
 
   clear() {

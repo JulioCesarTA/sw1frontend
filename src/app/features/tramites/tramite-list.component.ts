@@ -236,6 +236,7 @@ export class TramiteListComponent implements OnInit {
   tfVoiceLoading = signal(false);
   tfVoiceTranscript = signal('');
   formWorkflowId = '';
+  tramiteFolder  = '';        // UUID generado antes del primer upload — carpeta S3 del trámite
   codeFilter = signal('');
   private speechRecognition: any = null;
   private tfSpeechRecognition: any = null;
@@ -273,6 +274,7 @@ export class TramiteListComponent implements OnInit {
     this.stopVoiceCapture(false);
     this.voiceTranscript.set('');
     this.formWorkflowId = '';
+    this.tramiteFolder  = crypto.randomUUID();
     this.formValues.set({});
     this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
@@ -281,12 +283,14 @@ export class TramiteListComponent implements OnInit {
 
   closeCreate() {
     this.stopVoiceCapture(false);
+    this.tramiteFolder = '';
     this.showForm.set(false);
   }
 
   onWorkflowChange(workflowId: string) {
     this.stopVoiceCapture(false);
     this.voiceTranscript.set('');
+    this.tramiteFolder = crypto.randomUUID();
     this.formValues.set({});
     this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
@@ -389,7 +393,13 @@ export class TramiteListComponent implements OnInit {
       const file = files[index];
       const body = new FormData();
       body.append('file', file);
-      if (this.formWorkflowId) body.append('workflowId', this.formWorkflowId);
+      const wfName = this.selectedWorkflow()?.name;
+      if (wfName && this.tramiteFolder) {
+        body.append('workflowName', wfName);
+        body.append('tramiteFolder', this.tramiteFolder);
+      } else if (this.formWorkflowId) {
+        body.append('workflowId', this.formWorkflowId);
+      }
       this.api.post<FileValue>('/files/upload', body).subscribe({
         next: u => {
           uploaded.push(u);
@@ -537,6 +547,7 @@ export class TramiteListComponent implements OnInit {
     const payload = {
       title: wf && entry ? `${wf.name} - ${entry.name}` : `Tramite ${new Date().toLocaleString()}`,
       description: '', workflowId: this.formWorkflowId, formData: this.formValues(),
+      tramiteFolder: this.tramiteFolder || undefined,
       comment: `Enviado por ${this.auth.user()?.name || 'usuario'}`,
       autoTransitionIds: [this.autoStartTransition()?.id, this.submitTransition()?.id].filter((id): id is string => !!id)
     };

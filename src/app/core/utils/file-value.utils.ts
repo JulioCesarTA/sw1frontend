@@ -3,6 +3,8 @@ export interface StoredFileValue {
   fileName?: string;
   storedName: string;
   downloadPath?: string;
+  workflowName?: string;
+  tramiteFolder?: string;
 }
 
 export interface StoredFileDownloadContext {

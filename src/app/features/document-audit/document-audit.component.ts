@@ -95,7 +95,6 @@ interface DocumentAuditEntry {
                     <!-- Usuario -->
                     <td class="px-4 py-3">
                       <div class="font-medium text-slate-800">{{ item.userName || '-' }}</div>
-                      <div class="text-xs text-slate-400">{{ item.userEmail || '' }}</div>
                     </td>
 
                     <!-- Departamento -->
@@ -103,11 +102,16 @@ interface DocumentAuditEntry {
 
                     <!-- Cambios -->
                     <td class="px-4 py-3">
-                      @if (item.action === 'COLLAB_EDITED' && (item.textBefore || item.textAfter)) {
+                      @if (item.action === 'COLLAB_EDITED') {
                         <button
-                          class="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition"
+                          class="flex items-center gap-1 rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-40"
+                          [disabled]="loadingDiff() === item.id"
                           (click)="viewDiff(item)">
-                          <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">open_in_new</mat-icon>
+                          @if (loadingDiff() === item.id) {
+                            <mat-spinner [diameter]="12" />
+                          } @else {
+                            <mat-icon class="!h-3.5 !w-3.5 !text-[14px]">open_in_new</mat-icon>
+                          }
                           Ver cambios
                         </button>
                       } @else {
@@ -136,8 +140,9 @@ export class DocumentAuditComponent implements OnInit {
   private api    = inject(ApiService);
   private router = inject(Router);
 
-  loading = signal(true);
-  entries = signal<DocumentAuditEntry[]>([]);
+  loading     = signal(true);
+  entries     = signal<DocumentAuditEntry[]>([]);
+  loadingDiff = signal<string | null>(null);
 
   ngOnInit() {
     this.api.get<DocumentAuditEntry[]>('/document-audit').subscribe({
@@ -147,7 +152,15 @@ export class DocumentAuditComponent implements OnInit {
   }
 
   actionLabel(action: string): string {
-    return action.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    const map: Record<string, string> = {
+      CREATED:      'Creado',
+      READ:         'Abierto',
+      UPDATED:      'Editado',
+      DELETED:      'Eliminado',
+      COLLAB_OPENED:'Abierto',
+      COLLAB_EDITED:'Editado',
+    };
+    return map[action] ?? action;
   }
 
   actionIcon(): string { return 'info'; }
@@ -155,6 +168,14 @@ export class DocumentAuditComponent implements OnInit {
   actionCls(): string { return 'bg-slate-100 text-slate-700'; }
 
   viewDiff(item: DocumentAuditEntry) {
-    this.router.navigate(['/document-audit/diff'], { state: { entry: item } });
+    if (this.loadingDiff() === item.id) return;
+    this.loadingDiff.set(item.id);
+    this.api.get<DocumentAuditEntry>(`/document-audit/${item.id}`).subscribe({
+      next: detail => {
+        this.loadingDiff.set(null);
+        this.router.navigate(['/document-audit/diff'], { state: { entry: detail } });
+      },
+      error: () => this.loadingDiff.set(null),
+    });
   }
 }

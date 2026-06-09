@@ -17,11 +17,12 @@ interface AnalyzedDoc {
 }
 
 interface WorkflowMatch {
-  workflowId:      string;
-  workflowName:    string;
-  score:           number;
-  cosSim:          number;
-  confidence:      string;
+  workflowId:           string;
+  workflowName:         string;
+  workflowDescription?: string;
+  score:                number;
+  cosSim:               number;
+  confidence:           string;
   requiredDocs:    string[];
   optionalDocs:    string[];
   presentRequired: string[];
@@ -50,8 +51,8 @@ interface WorkflowMatch {
       <div>
         <h2 class="m-0 text-2xl font-bold text-slate-800">Usuario Pide</h2>
         <p class="mt-1 text-sm text-slate-500">
-          Describí tu problema y subí tus documentos. TensorFlow los leerá, determinará de qué tipo son
-          y recomendará el workflow que necesitás, indicando qué documentos obligatorios faltan.
+          Describí tu problema y subí tus documentos. TensorFlow analizará el contenido,
+          recomendará los 3 workflows más adecuados e indicará qué campos obligatorios faltan completar.
         </p>
       </div>
 
@@ -238,7 +239,10 @@ interface WorkflowMatch {
                       </span>
                       <div>
                         <p class="font-semibold text-slate-800">{{ m.workflowName }}</p>
-                        <p class="text-xs text-slate-400">Similitud: {{ m.cosSim }}%</p>
+                        @if (m.workflowDescription) {
+                          <p class="mt-0.5 text-xs text-slate-500">{{ m.workflowDescription }}</p>
+                        }
+                        <p class="mt-0.5 text-xs text-slate-400">Similitud: {{ m.cosSim }}%</p>
                       </div>
                     </div>
                     <div class="shrink-0 text-right">
@@ -258,11 +262,11 @@ interface WorkflowMatch {
                     </div>
                   </div>
 
-                  <!-- Documentos obligatorios del primer nodo -->
+                  <!-- Campos obligatorios del primer nodo de proceso -->
                   @if (m.requiredDocs.length) {
                     <div class="mt-4">
                       <p class="mb-2 text-xs font-semibold text-slate-500">
-                        Documentos obligatorios del primer paso:
+                        Campos obligatorios del primer paso:
                       </p>
                       <div class="flex flex-wrap gap-1.5">
                         @for (doc of m.requiredDocs; track doc) {
@@ -280,10 +284,10 @@ interface WorkflowMatch {
                     </div>
                   }
 
-                  <!-- Opcionales presentes -->
+                  <!-- Campos opcionales -->
                   @if (m.optionalDocs.length) {
                     <div class="mt-2">
-                      <p class="mb-2 text-xs font-semibold text-slate-400">Opcionales:</p>
+                      <p class="mb-2 text-xs font-semibold text-slate-400">Campos opcionales:</p>
                       <div class="flex flex-wrap gap-1.5">
                         @for (doc of m.optionalDocs; track doc) {
                           <span class="flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs"
@@ -298,19 +302,19 @@ interface WorkflowMatch {
                     </div>
                   }
 
-                  <!-- Alerta documentos faltantes -->
+                  <!-- Alerta campos faltantes -->
                   @if (m.missingRequired.length) {
                     <div class="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
                       <mat-icon class="!text-[18px] shrink-0 mt-0.5 text-amber-500">warning</mat-icon>
                       <div>
-                        <p class="font-semibold">Faltan estos documentos obligatorios:</p>
+                        <p class="font-semibold">Faltan estos campos obligatorios:</p>
                         <ul class="mt-1 list-disc pl-4 space-y-0.5">
-                          @for (doc of m.missingRequired; track doc) {
-                            <li><strong>{{ doc }}</strong></li>
+                          @for (campo of m.missingRequired; track campo) {
+                            <li><strong>{{ campo }}</strong></li>
                           }
                         </ul>
                         <p class="mt-1 text-amber-700">
-                          Tenés que presentarlos para poder avanzar en el trámite.
+                          Tenés que completarlos o presentarlos para poder avanzar en el trámite.
                         </p>
                       </div>
                     </div>
@@ -319,7 +323,7 @@ interface WorkflowMatch {
                   @if (m.docsComplete) {
                     <div class="mt-3 flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
                       <mat-icon class="!text-[16px]">verified</mat-icon>
-                      Tenés todos los documentos obligatorios. ¡Podés iniciar el trámite!
+                      Tenés todos los campos obligatorios cubiertos. ¡Podés iniciar el trámite!
                     </div>
                   }
 

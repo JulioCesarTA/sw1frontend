@@ -227,7 +227,7 @@ declare global {
                       <div class="mb-4">
                         <div class="mb-2 flex items-center justify-between gap-3">
                           <label class="text-[13px] font-medium text-slate-700">{{ field.name }}</label>
-                          <button mat-stroked-button type="button" [disabled]="!canAdvance()" (click)="addGridRow(field)">Agregar fila</button>
+                          <button mat-stroked-button type="button" (click)="addGridRow(field)">Agregar fila</button>
                         </div>
                         @if (gridColumns(field).length) {
                           <div class="overflow-x-auto rounded-xl border border-slate-200">
@@ -246,11 +246,10 @@ declare global {
                                     @for (column of gridColumns(field); track column.id) {
                                       <td class="px-3 py-2">
                                         @if (column.type === 'CHECKBOX') {
-                                          <mat-checkbox [disabled]="!canAdvance()" [ngModel]="toBoolean(row[column.name])" (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)"></mat-checkbox>
+                                          <mat-checkbox [ngModel]="toBoolean(row[column.name])" (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)"></mat-checkbox>
                                         } @else {
                                           <input
                                             class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-400"
-                                            [disabled]="!canAdvance()"
                                             [type]="inputType(column.type)"
                                             [ngModel]="row[column.name] ?? ''"
                                             (ngModelChange)="setGridCellValue(field, rowIndex, column, $event)" />
@@ -258,7 +257,7 @@ declare global {
                                       </td>
                                     }
                                     <td class="px-3 py-2 text-right">
-                                        <button mat-button color="warn" type="button" [disabled]="!canAdvance()" (click)="removeGridRow(field, rowIndex)">Quitar</button>
+                                        <button mat-button color="warn" type="button" (click)="removeGridRow(field, rowIndex)">Quitar</button>
                                     </td>
                                   </tr>
                                 } @empty {
@@ -277,21 +276,21 @@ declare global {
                       </div>
                     } @else if (field.type === "CHECKBOX") {
                       <div class="mb-4 rounded-xl border border-slate-200 px-3 py-2">
-                        <mat-checkbox [disabled]="!canAdvance()" [ngModel]="toBoolean(fieldValue(field))" (ngModelChange)="setFieldValue(field, $event)">
+                        <mat-checkbox [ngModel]="toBoolean(fieldValue(field))" (ngModelChange)="setFieldValue(field, $event)">
                           {{ field.name }}
                         </mat-checkbox>
                       </div>
                     } @else {
                       <mat-form-field appearance="outline" class="w-full">
                         <mat-label>{{ field.name }}</mat-label>
-                        <input matInput [disabled]="!canAdvance()" [type]="inputType(field.type)" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field, $event)" />
+                        <input matInput [type]="inputType(field.type)" [ngModel]="fieldValue(field)" (ngModelChange)="setFieldValue(field, $event)" />
                       </mat-form-field>
                     }
                   }
                 </section>
               }
 
-              @if (visibleTransitions().length && canAdvance()) {
+              @if (visibleTransitions().length) {
                 <div class="mt-2 flex flex-wrap justify-end gap-3">
                   @for (transition of visibleTransitions(); track transition.id) {
                     <button mat-flat-button
@@ -545,12 +544,18 @@ export class ActivitiesComponent implements OnInit {
     const activity = this.selectedActivity();
     if (!activity) return;
     this.collabDocService.openFile({
-      tramiteId: activity.id,
-      storedName: file.storedName,
-      workflowId: activity.workflowId,
-      title: file.fileName || fieldName,
+      tramiteId:     activity.id,
+      storedName:    file.storedName,
+      workflowId:    activity.workflowId,
+      workflowName:  file.workflowName || (activity as any).workflowName,
+      tramiteFolder: file.tramiteFolder,
+      title:         file.fileName || fieldName,
+      downloadPath:  file.downloadPath,
     }).subscribe({
-      next: (doc) => this.router.navigate(['/collab-docs', doc.id]),
+      next: (doc) => {
+        sessionStorage.setItem(`collab_${doc.roomId}`, JSON.stringify(doc));
+        this.router.navigate(['/collab-docs', doc.roomId], { state: { doc } });
+      },
       error: () => this.snackBar.open("No se pudo abrir el archivo en el editor", "", { duration: 3000 }),
     });
   }

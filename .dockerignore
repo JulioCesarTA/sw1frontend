@@ -3,3 +3,6 @@ dist
 .angular
 .git
 npm-debug.log
+.env
+.env.*
+*.log

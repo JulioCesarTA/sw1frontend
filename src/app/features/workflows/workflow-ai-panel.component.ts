@@ -6,6 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
+import { TfOfflineService } from '../../core/services/tf-offline.service';
 
 type NodeType = 'inicio' | 'proceso' | 'decision' | 'bifurcasion' | 'union' | 'fin' | 'iteracion';
 type FieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'FILE' | 'EMAIL' | 'CHECKBOX' | 'GRID';
@@ -428,6 +429,7 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
   @Input() onError?: (message: string) => void;
 
   private api = inject(ApiService);
+  private tfOffline = inject(TfOfflineService);
   private workyRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   diagramBusy = signal(false);
@@ -594,6 +596,13 @@ export class WorkflowAiPanelComponent implements OnChanges, OnDestroy {
       }));
       this.bottleneckResult.set(result);
     } catch (err: any) {
+      if (this.workflowId) {
+        const offline = await this.tfOffline.predictBottleneckOffline(this.workflowId);
+        if (offline) {
+          this.bottleneckResult.set(offline);
+          return;
+        }
+      }
       this.handleError(err?.error?.message || err?.message || 'No se pudo analizar el workflow');
     } finally {
       this.bottleneckLoading.set(false);

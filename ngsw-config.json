@@ -1,0 +1,92 @@
+{
+  "$schema": "./node_modules/@angular/service-worker/config/schema.json",
+  "index": "/index.html",
+  "assetGroups": [
+    {
+      "name": "app",
+      "installMode": "prefetch",
+      "resources": {
+        "files": [
+          "/favicon.ico",
+          "/index.html",
+          "/manifest.webmanifest",
+          "/*.css",
+          "/*.js"
+        ]
+      }
+    },
+    {
+      "name": "assets",
+      "installMode": "lazy",
+      "updateMode": "prefetch",
+      "resources": {
+        "files": [
+          "/assets/**",
+          "/media/*.(svg|cur|jpg|jpeg|png|apng|webp|avif|gif|otf|ttf|woff|woff2)"
+        ]
+      }
+    }
+  ],
+  "dataGroups": [
+    {
+      "name": "tensorflow-models",
+      "urls": [
+        "/api/workflow-ai/models/offline-data",
+        "/api/workflow-ai/static/models/**"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 50,
+        "maxAge": "7d",
+        "timeout": "30s"
+      }
+    },
+    {
+      "name": "tensorflow-predictions",
+      "urls": [
+        "/api/workflow-ai/nlp/rank-priority-real/**",
+        "/api/workflow-ai/nlp/detect-anomalies/**",
+        "/api/workflow-ai/nlp/predict-delay/**",
+        "/api/workflow-ai/nlp/predict-bottleneck/**",
+        "/api/workflow-ai/nlp/rank-priority-real"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 100,
+        "maxAge": "7d",
+        "timeout": "10s"
+      }
+    },
+    {
+      "name": "tensorflow-nlp",
+      "urls": [
+        "/api/workflow-ai/nlp/fill-form",
+        "/api/workflow-ai/nlp/match-with-docs",
+        "/api/workflow-ai/nlp/workflow-requirements",
+        "/api/workflow-ai/nlp/report-generate"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 50,
+        "maxAge": "1d",
+        "timeout": "10s"
+      }
+    },
+    {
+      "name": "api-data",
+      "urls": [
+        "/api/workflows",
+        "/api/workflows/**",
+        "/api/tramites/**",
+        "/api/users/**",
+        "/api/departments/**"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 200,
+        "maxAge": "1d",
+        "timeout": "10s"
+      }
+    }
+  ]
+}

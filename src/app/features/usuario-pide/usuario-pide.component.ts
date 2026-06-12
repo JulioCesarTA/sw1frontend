@@ -1,4 +1,4 @@
-import { Component, OnDestroy, signal } from '@angular/core';
+import { Component, inject, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -6,6 +6,7 @@ import { Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { environment } from '../../../environments/environment';
+import { TfOfflineService } from '../../core/services/tf-offline.service';
 
 
 
@@ -350,6 +351,9 @@ interface WorkflowMatch {
   `
 })
 export class UsuarioPideComponent implements OnDestroy {
+  private http        = inject(HttpClient);
+  private router      = inject(Router);
+  private tfOffline   = inject(TfOfflineService);
   private recognition: any = null;
 
   recording    = signal(false);
@@ -360,8 +364,6 @@ export class UsuarioPideComponent implements OnDestroy {
 
   userText      = '';
   selectedFiles: File[] = [];
-
-  constructor(private http: HttpClient, private router: Router) {}
 
   // ---------------------------------------------------------------- //
   // Archivos
@@ -420,10 +422,22 @@ export class UsuarioPideComponent implements OnDestroy {
         this.loading.set(false);
       },
       error: (err) => {
+        if (err.status === 0 || err.status >= 500) {
+          try {
+            const docTexts = this.selectedFiles.map(f => f.name);
+            const offlineMatches = this.tfOffline.matchWorkflowOffline(this.userText.trim(), docTexts);
+            if (offlineMatches.length) {
+              this.analyzedDocs.set([]);
+              this.matches.set(offlineMatches as WorkflowMatch[]);
+              this.loading.set(false);
+              return;
+            }
+          } catch { /* fall through */ }
+        }
         this.loading.set(false);
         this.error.set(
           err.status === 0
-            ? 'No se pudo conectar al servidor. ¿Está corriendo el backend?'
+            ? 'No se pudo conectar al servidor (modo offline no disponible)'
             : `Error ${err.status}: ${err.error?.detail ?? 'Error desconocido'}`
         );
       },

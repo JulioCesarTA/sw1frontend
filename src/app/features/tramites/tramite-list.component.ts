@@ -15,6 +15,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { finalize } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { AuthService } from '../../core/services/auth.service';
+import { TfOfflineService } from '../../core/services/tf-offline.service';
 import { isStoredFileArray, isStoredFileValue, openStoredFileDownload, storedFileLabel } from '../../core/utils/file-value.utils';
 import { environment } from '../../../environments/environment';
 
@@ -212,11 +213,12 @@ declare global {
   `
 })
 export class TramiteListComponent implements OnInit {
-  private api   = inject(ApiService);
-  private http  = inject(HttpClient);
-  private snack = inject(MatSnackBar);
-  private auth  = inject(AuthService);
-  private router = inject(Router);
+  private api       = inject(ApiService);
+  private http      = inject(HttpClient);
+  private snack     = inject(MatSnackBar);
+  private auth      = inject(AuthService);
+  private router    = inject(Router);
+  private tfOffline = inject(TfOfflineService);
 
   tramites = signal<Tramite[]>([]);
   workflows = signal<Workflow[]>([]);
@@ -512,9 +514,9 @@ export class TramiteListComponent implements OnInit {
       columns: f.columns ?? []
     }));
     this.http.post<any>(`${this.NLP_URL}/nlp/fill-form`, { transcript, fields })
-      .pipe(finalize(() => this.tfVoiceLoading.set(false)))
       .subscribe({
         next: (res) => {
+          this.tfVoiceLoading.set(false);
           if (res.formData && Object.keys(res.formData).length) {
             const merged: Record<string, unknown> = { ...this.formValues() };
             for (const [key, val] of Object.entries(res.formData)) {
@@ -536,7 +538,31 @@ export class TramiteListComponent implements OnInit {
           }
           this.tfVoiceTranscript.set('');
         },
-        error: () => this.snack.open('Error conectando con el servidor', '', { duration: 3500 })
+        error: async () => {
+          try {
+            const res = await this.tfOffline.fillFormOffline(transcript, fields);
+            if (res.formData && Object.keys(res.formData).length) {
+              const merged: Record<string, unknown> = { ...this.formValues() };
+              for (const [key, val] of Object.entries(res.formData)) {
+                if (Array.isArray(val)) {
+                  const existing = Array.isArray(merged[key]) ? (merged[key] as unknown[]) : [];
+                  merged[key] = [...existing, ...val];
+                } else {
+                  merged[key] = val;
+                }
+              }
+              this.formValues.set(merged);
+              this.snack.open(`TF (offline) completó ${res.appliedFields?.length ?? 0} campo(s)`, '', { duration: 3000 });
+            } else {
+              this.snack.open('TF offline no detectó valores', 'OK', { duration: 5000 });
+            }
+            this.tfVoiceTranscript.set('');
+          } catch {
+            this.snack.open('Error conectando con el servidor', '', { duration: 3500 });
+          } finally {
+            this.tfVoiceLoading.set(false);
+          }
+        }
       });
   }
 

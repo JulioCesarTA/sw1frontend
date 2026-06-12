@@ -13,6 +13,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
+import { TfOfflineService } from '../../core/services/tf-offline.service';
 import { WorkflowAiPanelComponent } from './workflow-ai-panel.component';
 import { NodeBehaviorResolver } from './utils/node-behavior-resolver';
 import { autoLayoutWorkflowNodos } from './utils/workflow-layout.utils';
@@ -818,6 +819,7 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private snack = inject(MatSnackBar);
   private collab = inject(WorkflowCollaborationService);
+  private tfOffline = inject(TfOfflineService);
   private nodeBehaviorResolver = new NodeBehaviorResolver();
 
   readonly fieldTypes: FieldType[] = ['TEXT', 'NUMBER', 'DATE', 'FILE', 'EMAIL', 'CHECKBOX', 'GRID'];
@@ -2239,7 +2241,13 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       );
       this.priorityResult.set(result);
     } catch {
-      this.snack.open('No se pudo obtener prioridades', '', { duration: 3000 });
+      const offline = this.tfOffline.rankPriorityOffline(wfId);
+      if (offline) {
+        this.priorityResult.set(offline);
+        this.snack.open('Modo offline — datos cacheados', '', { duration: 2000 });
+      } else {
+        this.snack.open('No se pudo obtener prioridades', '', { duration: 3000 });
+      }
     } finally {
       this.priorityLoading.set(false);
     }
@@ -2255,7 +2263,13 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       );
       this.anomalyResult.set(result);
     } catch {
-      this.snack.open('No se pudo analizar anomalías', '', { duration: 3000 });
+      const offline = await this.tfOffline.detectAnomaliesOffline(wfId);
+      if (offline) {
+        this.anomalyResult.set(offline);
+        this.snack.open('Modo offline — datos cacheados', '', { duration: 2000 });
+      } else {
+        this.snack.open('No se pudo analizar anomalías', '', { duration: 3000 });
+      }
     } finally {
       this.anomalyLoading.set(false);
     }

@@ -276,7 +276,7 @@ export class TramiteListComponent implements OnInit {
     this.stopVoiceCapture(false);
     this.voiceTranscript.set('');
     this.formWorkflowId = '';
-    this.tramiteFolder  = crypto.randomUUID();
+    this.tramiteFolder  = this._uuid();
     this.formValues.set({});
     this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
@@ -292,7 +292,7 @@ export class TramiteListComponent implements OnInit {
   onWorkflowChange(workflowId: string) {
     this.stopVoiceCapture(false);
     this.voiceTranscript.set('');
-    this.tramiteFolder = crypto.randomUUID();
+    this.tramiteFolder = this._uuid();
     this.formValues.set({});
     this.selectedWorkflow.set(null); this.entryNodo.set(null);
     this.autoStartTransition.set(null); this.submitTransition.set(null);
@@ -631,5 +631,15 @@ export class TramiteListComponent implements OnInit {
       clearTimeout(this.silenceTimer);
       this.silenceTimer = null;
     }
+  }
+
+  private _uuid(): string {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+      const r = Math.random() * 16 | 0;
+      return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+    });
   }
 }

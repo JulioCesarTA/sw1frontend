@@ -100,19 +100,36 @@ export class TfOfflineService {
   private formFillerVocab:    Map<string, number> | null = null;
   private formFillerCmdTypes: string[] = ['FIELD_ASSIGN', 'GRID_INIT', 'GRID_COLUMN', 'UNKNOWN'];
   private formFillerSeqLen:   number = 20;
-  private initialized = false;
+  private initialized  = false;
+  private initializing = false;
 
   constructor(private http: HttpClient) {}
 
-  // ── Public: initialize (call on app start when online) ──────────────────
+  // ── Public: initialize on app start (no-op si ya corrió) ────────────────
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
-    this.initialized = true;
+    if (this.initialized || this.initializing) return;
+    return this._doInit();
+  }
+
+  // ── Public: forzar re-descarga (llamar justo después del login) ──────────
+
+  async reinitialize(): Promise<void> {
+    if (this.initializing) return;
+    this.initialized = false;
+    return this._doInit();
+  }
+
+  private async _doInit(): Promise<void> {
+    this.initializing = true;
     try {
       await this._loadFromCacheOrServer();
+      this.initialized = true;
+      console.log('[TfOffline] ✓ modelos listos — wf_map keys:', Object.keys(this.offlineData?.wf_map ?? {}).length);
     } catch (e) {
       console.warn('[TfOffline] init error:', e);
+    } finally {
+      this.initializing = false;
     }
   }
 

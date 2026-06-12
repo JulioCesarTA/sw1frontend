@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, catchError, finalize, shareReplay, switchMap, tap, throwError } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { TfOfflineService } from './tf-offline.service';
 
 export interface AuthUser {
   id: string;
@@ -18,8 +19,9 @@ export interface AuthUser {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private static readonly USER_STORAGE_KEY = 'authUser';
-  private http = inject(HttpClient);
-  private router = inject(Router);
+  private http    = inject(HttpClient);
+  private router  = inject(Router);
+  private tfOffline = inject(TfOfflineService);
   private base = environment.apiUrl;
   private refreshRequest$: Observable<string> | null = null;
 
@@ -72,6 +74,8 @@ export class AuthService {
         localStorage.setItem('refreshToken', res.refreshToken);
         this.persistUser(res.user);
         this.loading.set(false);
+        // Descargar y cachear modelos TF en background justo después del login
+        this.tfOffline.reinitialize().catch(e => console.warn('[TfOffline] reinit after login:', e));
       })
     );
   }

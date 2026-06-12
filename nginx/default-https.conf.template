@@ -1,0 +1,141 @@
+# HTTP → redirige a HTTPS, excepto certbot challenge
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS
+server {
+    listen 443 ssl;
+    server_name ${DOMAIN};
+    http2 on;
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 10m;
+
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Gzip
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types
+        text/plain text/css text/xml text/javascript
+        application/json application/javascript application/xml
+        application/wasm image/svg+xml;
+
+    # Service Worker — nunca cachear
+    location = /ngsw-worker.js {
+        add_header Cache-Control "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0";
+        expires off;
+        try_files $uri =404;
+    }
+    location = /ngsw.json {
+        add_header Cache-Control "no-store, no-cache";
+        expires off;
+        try_files $uri =404;
+    }
+
+    # PWA manifest
+    location = /manifest.webmanifest {
+        add_header Cache-Control "public, max-age=86400";
+        try_files $uri =404;
+    }
+
+    # Assets con hash (Angular)
+    location ~* \.(js|css|woff2?|ttf|eot|ico|png|jpg|webp|svg)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files $uri =404;
+    }
+
+    # WebSocket
+    location /api/ws/ {
+        proxy_pass http://backend:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+        proxy_set_header Upgrade           $http_upgrade;
+        proxy_set_header Connection        "upgrade";
+        proxy_read_timeout  3600s;
+        proxy_send_timeout  3600s;
+        proxy_buffering     off;
+        proxy_cache_bypass  $http_upgrade;
+    }
+
+    location /api/workflow-ai/nlp/predict-delay/ {
+        proxy_pass         http://tf:8001/nlp/predict-delay/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host            $host;
+        proxy_set_header   X-Real-IP       $remote_addr;
+        proxy_read_timeout 30s;
+        proxy_buffering    off;
+    }
+
+    location /api/workflow-ai/nlp/predict-bottleneck/ {
+        proxy_pass         http://tf:8001/nlp/predict-bottleneck/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host            $host;
+        proxy_set_header   X-Real-IP       $remote_addr;
+        proxy_read_timeout 30s;
+        proxy_buffering    off;
+    }
+
+    location /api/workflow-ai/models/ {
+        proxy_pass         http://tf:8001/models/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host            $host;
+        proxy_set_header   X-Real-IP       $remote_addr;
+        proxy_read_timeout 30s;
+        proxy_buffering    off;
+    }
+
+    location /api/workflow-ai/static/ {
+        proxy_pass         http://tf:8001/static/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host            $host;
+        proxy_set_header   X-Real-IP       $remote_addr;
+        proxy_read_timeout 30s;
+        proxy_buffering    off;
+    }
+
+    location /api/ {
+        proxy_pass http://backend:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+        proxy_read_timeout  120s;
+        proxy_send_timeout  120s;
+        proxy_buffering     off;
+        client_max_body_size 50m;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}

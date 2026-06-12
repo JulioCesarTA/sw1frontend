@@ -78,17 +78,32 @@
       "name": "api-core",
       "urls": [
         "/api/workflows",
+        "/api/workflows?*",
         "/api/workflows/**",
+        "/api/departments",
+        "/api/departments?*",
         "/api/departments/**",
+        "/api/users",
+        "/api/users?*",
         "/api/users/**",
+        "/api/tramites",
+        "/api/tramites?*",
         "/api/tramites/**",
-        "/api/activities/**"
+        "/api/activities",
+        "/api/activities?*",
+        "/api/activities/**",
+        "/api/job-roles",
+        "/api/job-roles?*",
+        "/api/job-roles/**",
+        "/api/companies",
+        "/api/companies?*",
+        "/api/companies/**"
       ],
       "cacheConfig": {
         "strategy": "freshness",
         "maxSize": 500,
-        "maxAge": "30m",
-        "timeout": "10s"
+        "maxAge": "1h",
+        "timeout": "5s"
       }
     },
     {

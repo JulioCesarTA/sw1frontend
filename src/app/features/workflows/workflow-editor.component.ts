@@ -155,7 +155,7 @@ interface ResolvedNodoField extends FormField {
   originNodoName: string;
 }
 
-type SidebarTab = 'inspector' | 'priority' | 'anomaly';
+type SidebarTab = 'inspector' | 'priority' | 'anomaly' | 'bottleneck' | 'delay';
 
 interface PriorityTramite {
   id: string; code: string; title: string; status: string;
@@ -176,6 +176,21 @@ interface AnomalyResult {
   workflowId: string; workflowName: string; trainedOn: number;
   threshold: number; total: number; totalAnomalies: number;
   anomalies: AnomalyTramite[]; normal: AnomalyTramite[];
+}
+interface BottleneckNode {
+  nodoId: string; nodoName: string; order: number;
+  avgMinutes: number; score: number; isBottleneck: boolean;
+  historicalOvertime: number; visits: number;
+}
+interface BottleneckResult {
+  workflowId: string; workflowName: string;
+  bottlenecks: BottleneckNode[]; allNodes: BottleneckNode[];
+}
+interface DelayResult {
+  workflowId: string; workflowName: string; available: boolean;
+  delayProbability: number; riskLevel: string;
+  extraHoursEstimated: number; totalExpectedHours: number;
+  numNodos: number; historicalDelayRate: number; message?: string;
 }
 
 interface DiagramAiAction {
@@ -454,19 +469,31 @@ interface FormVoiceDesignResult {
             </section>
 
             <aside class="rounded-[22px] border border-slate-200 bg-white p-[18px] shadow-[0_8px_30px_rgba(15,23,42,.05)]">
-              <div class="mb-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
-                <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
-                        [class.bg-white]="sidebarTab() === 'inspector'"
-                        [class.text-indigo-700]="sidebarTab() === 'inspector'"
-                        (click)="sidebarTab.set('inspector')">Inspector</button>
-                <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
-                        [class.bg-white]="sidebarTab() === 'priority'"
-                        [class.text-indigo-700]="sidebarTab() === 'priority'"
-                        (click)="sidebarTab.set('priority')">Prioridad</button>
-                <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
-                        [class.bg-white]="sidebarTab() === 'anomaly'"
-                        [class.text-indigo-700]="sidebarTab() === 'anomaly'"
-                        (click)="sidebarTab.set('anomaly')">Anomalías</button>
+              <div class="mb-4 space-y-1">
+                <div class="grid grid-cols-3 gap-1 rounded-2xl bg-slate-100 p-1">
+                  <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
+                          [class.bg-white]="sidebarTab() === 'inspector'"
+                          [class.text-indigo-700]="sidebarTab() === 'inspector'"
+                          (click)="sidebarTab.set('inspector')">Inspector</button>
+                  <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
+                          [class.bg-white]="sidebarTab() === 'priority'"
+                          [class.text-indigo-700]="sidebarTab() === 'priority'"
+                          (click)="sidebarTab.set('priority')">Prioridad</button>
+                  <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
+                          [class.bg-white]="sidebarTab() === 'anomaly'"
+                          [class.text-indigo-700]="sidebarTab() === 'anomaly'"
+                          (click)="sidebarTab.set('anomaly')">Anomalías</button>
+                </div>
+                <div class="grid grid-cols-2 gap-1 rounded-2xl bg-slate-100 p-1">
+                  <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
+                          [class.bg-white]="sidebarTab() === 'bottleneck'"
+                          [class.text-indigo-700]="sidebarTab() === 'bottleneck'"
+                          (click)="sidebarTab.set('bottleneck')">Cuello de Botella</button>
+                  <button type="button" class="rounded-xl px-2 py-2 text-xs font-semibold"
+                          [class.bg-white]="sidebarTab() === 'delay'"
+                          [class.text-indigo-700]="sidebarTab() === 'delay'"
+                          (click)="sidebarTab.set('delay')">Demora</button>
+                </div>
               </div>
 
               @if (sidebarTab() === 'inspector' && selectedNodo()) {
@@ -781,6 +808,89 @@ interface FormVoiceDesignResult {
                     <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Presiona Entrenar para detectar comportamientos anómalos.</div>
                   }
                 </div>
+              } @else if (sidebarTab() === 'bottleneck') {
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="m-0 text-lg text-slate-950">Cuello de Botella</h3>
+                    <button mat-stroked-button [disabled]="bottleneckLoading() || !workflow()?.id" (click)="runBottleneckAnalysis()">
+                      @if (bottleneckLoading()) { <mat-spinner diameter="16" /> } @else { <mat-icon>compress</mat-icon> }
+                      Analizar
+                    </button>
+                  </div>
+                  @if (!workflow()?.id) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Guarda el workflow primero.</div>
+                  } @else if (bottleneckLoading()) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">Analizando nodos…</div>
+                  } @else if (bottleneckResult()) {
+                    @if (!bottleneckResult()!.allNodes?.length) {
+                      <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Sin datos suficientes aún.</div>
+                    }
+                    @for (n of bottleneckResult()!.allNodes; track n.nodoId) {
+                      <div class="rounded-2xl border p-3" [class.border-red-300]="n.isBottleneck" [class.bg-red-50]="n.isBottleneck" [class.border-slate-200]="!n.isBottleneck" [class.bg-white]="!n.isBottleneck">
+                        <div class="flex items-center justify-between gap-2">
+                          <div class="text-sm font-semibold text-slate-800">{{ n.nodoName }}</div>
+                          @if (n.isBottleneck) {
+                            <span class="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Cuello</span>
+                          }
+                        </div>
+                        <div class="mt-1 text-xs text-slate-500">Score: {{ (n.score * 100).toFixed(0) }}% · Promedio: {{ n.avgMinutes }} min</div>
+                        <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                          <div class="h-full rounded-full transition-all" [class.bg-red-500]="n.isBottleneck" [class.bg-slate-400]="!n.isBottleneck" [style.width.%]="n.score * 100"></div>
+                        </div>
+                      </div>
+                    }
+                  } @else {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Presiona Analizar para detectar los nodos más lentos.</div>
+                  }
+                </div>
+              } @else if (sidebarTab() === 'delay') {
+                <div class="space-y-4">
+                  <div class="flex items-center justify-between">
+                    <h3 class="m-0 text-lg text-slate-950">Demora</h3>
+                    <button mat-stroked-button [disabled]="delayLoading() || !workflow()?.id" (click)="runDelayAnalysis()">
+                      @if (delayLoading()) { <mat-spinner diameter="16" /> } @else { <mat-icon>schedule</mat-icon> }
+                      Predecir
+                    </button>
+                  </div>
+                  @if (!workflow()?.id) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Guarda el workflow primero.</div>
+                  } @else if (delayLoading()) {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">Calculando predicción…</div>
+                  } @else if (delayResult()) {
+                    @if (!delayResult()!.available) {
+                      <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">{{ delayResult()!.message ?? 'Sin datos históricos suficientes.' }}</div>
+                    } @else {
+                      <div class="rounded-2xl border p-4 text-center"
+                           [class.border-red-300]="delayResult()!.riskLevel === 'ALTO'"
+                           [class.bg-red-50]="delayResult()!.riskLevel === 'ALTO'"
+                           [class.border-yellow-300]="delayResult()!.riskLevel === 'MEDIO'"
+                           [class.bg-yellow-50]="delayResult()!.riskLevel === 'MEDIO'"
+                           [class.border-green-300]="delayResult()!.riskLevel === 'BAJO'"
+                           [class.bg-green-50]="delayResult()!.riskLevel === 'BAJO'">
+                        <div class="text-3xl font-bold"
+                             [class.text-red-700]="delayResult()!.riskLevel === 'ALTO'"
+                             [class.text-yellow-700]="delayResult()!.riskLevel === 'MEDIO'"
+                             [class.text-green-700]="delayResult()!.riskLevel === 'BAJO'">
+                          {{ (delayResult()!.delayProbability * 100).toFixed(0) }}%
+                        </div>
+                        <div class="mt-1 text-sm font-semibold"
+                             [class.text-red-700]="delayResult()!.riskLevel === 'ALTO'"
+                             [class.text-yellow-700]="delayResult()!.riskLevel === 'MEDIO'"
+                             [class.text-green-700]="delayResult()!.riskLevel === 'BAJO'">
+                          Riesgo {{ delayResult()!.riskLevel }}
+                        </div>
+                      </div>
+                      <div class="space-y-1 text-xs text-slate-600">
+                        <div class="flex justify-between"><span>Tiempo esperado</span><span class="font-semibold">{{ delayResult()!.totalExpectedHours }}h</span></div>
+                        <div class="flex justify-between"><span>Retraso estimado</span><span class="font-semibold">+{{ delayResult()!.extraHoursEstimated }}h</span></div>
+                        <div class="flex justify-between"><span>Tasa histórica</span><span class="font-semibold">{{ (delayResult()!.historicalDelayRate * 100).toFixed(0) }}%</span></div>
+                        <div class="flex justify-between"><span>Nodos</span><span class="font-semibold">{{ delayResult()!.numNodos }}</span></div>
+                      </div>
+                    }
+                  } @else {
+                    <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">Presiona Predecir para estimar la probabilidad de demora.</div>
+                  }
+                </div>
               } @else {
                 <h3 class="m-0 mb-3 text-lg text-slate-950">Inspector</h3>
                 <div class="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-500">
@@ -845,10 +955,14 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
   selectedTransitionId = signal<string | null>(null);
   connectingFromId = signal<string | null>(null);
   sidebarTab = signal<SidebarTab>('inspector');
-  priorityLoading = signal(false);
-  priorityResult  = signal<PriorityResult | null>(null);
-  anomalyLoading  = signal(false);
-  anomalyResult   = signal<AnomalyResult | null>(null);
+  priorityLoading    = signal(false);
+  priorityResult     = signal<PriorityResult | null>(null);
+  anomalyLoading     = signal(false);
+  anomalyResult      = signal<AnomalyResult | null>(null);
+  bottleneckLoading  = signal(false);
+  bottleneckResult   = signal<BottleneckResult | null>(null);
+  delayLoading       = signal(false);
+  delayResult        = signal<DelayResult | null>(null);
   readonly applyAiActionsBound = (actions: DiagramAiAction[]) => this.applyAiActions(actions);
   readonly applyVoiceFormPatchBound = (result: FormVoiceDesignResult) => this.applyVoiceFormPatch(result);
   readonly showAiError = (message: string) => this.snack.open(message, '', { duration: 3500 });
@@ -2272,6 +2386,50 @@ export class WorkflowEditorComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.anomalyLoading.set(false);
+    }
+  }
+
+  async runBottleneckAnalysis() {
+    const wfId = this.workflow()?.id;
+    if (!wfId || this.bottleneckLoading()) return;
+    this.bottleneckLoading.set(true);
+    try {
+      const result = await firstValueFrom(
+        this.api.get<BottleneckResult>(`/workflow-ai/nlp/predict-bottleneck/${wfId}`)
+      );
+      this.bottleneckResult.set(result);
+    } catch {
+      const offline = await this.tfOffline.predictBottleneckOffline(wfId);
+      if (offline) {
+        this.bottleneckResult.set(offline);
+        this.snack.open('Modo offline — datos cacheados', '', { duration: 2000 });
+      } else {
+        this.snack.open('No se pudo analizar cuellos de botella', '', { duration: 3000 });
+      }
+    } finally {
+      this.bottleneckLoading.set(false);
+    }
+  }
+
+  async runDelayAnalysis() {
+    const wfId = this.workflow()?.id;
+    if (!wfId || this.delayLoading()) return;
+    this.delayLoading.set(true);
+    try {
+      const result = await firstValueFrom(
+        this.api.get<DelayResult>(`/workflow-ai/nlp/predict-delay/${wfId}`)
+      );
+      this.delayResult.set(result);
+    } catch {
+      const offline = await this.tfOffline.predictDelayOffline(wfId);
+      if (offline) {
+        this.delayResult.set(offline);
+        this.snack.open('Modo offline — datos cacheados', '', { duration: 2000 });
+      } else {
+        this.snack.open('No se pudo predecir demora', '', { duration: 3000 });
+      }
+    } finally {
+      this.delayLoading.set(false);
     }
   }
 

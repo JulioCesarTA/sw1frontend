@@ -167,7 +167,8 @@ interface PriorityResult {
   total: number; ranked: PriorityTramite[];
 }
 interface AnomalyTramite {
-  id: string; code: string; title: string; status: string;
+  id: string; code: string; title: string; workflowName: string;
+  currentNodoName?: string; status: string;
   elapsedHours: number; expectedHours: number;
   anomalyScore: number; reconstructionError: number;
   threshold: number; isAnomaly: boolean; mainFactor: string; factorDetail?: string;
@@ -795,7 +796,7 @@ interface FormVoiceDesignResult {
                       @for (a of anomalyResult()!.anomalies; track a.id) {
                         <div class="rounded-2xl border border-slate-200 bg-white p-3">
                           <div class="text-sm font-semibold text-slate-800">{{ a.code }}</div>
-                          @if (a.title) { <div class="mt-0.5 text-xs text-slate-500">{{ a.title }}</div> }
+                          <div class="mt-0.5 text-xs text-slate-500">{{ a.workflowName }}{{ a.currentNodoName ? ' — ' + a.currentNodoName : '' }}</div>
                           <div class="mt-1.5 text-xs text-slate-600">{{ a.factorDetail ?? (formatHours(a.elapsedHours) + ' abierto · esperado ' + formatHours(a.expectedHours)) }}</div>
                         </div>
                       }

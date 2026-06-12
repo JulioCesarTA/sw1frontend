@@ -3,8 +3,9 @@
   "index": "/index.html",
   "assetGroups": [
     {
-      "name": "app",
+      "name": "app-shell",
       "installMode": "prefetch",
+      "updateMode": "prefetch",
       "resources": {
         "files": [
           "/favicon.ico",
@@ -29,62 +30,70 @@
   ],
   "dataGroups": [
     {
-      "name": "tensorflow-models",
+      "name": "tf-model-weights",
       "urls": [
-        "/api/workflow-ai/models/offline-data",
         "/api/workflow-ai/static/models/**"
       ],
       "cacheConfig": {
-        "strategy": "freshness",
-        "maxSize": 50,
-        "maxAge": "7d",
-        "timeout": "30s"
+        "strategy": "performance",
+        "maxSize": 30,
+        "maxAge": "30d",
+        "timeout": "60s"
       }
     },
     {
-      "name": "tensorflow-predictions",
+      "name": "tf-offline-data",
       "urls": [
-        "/api/workflow-ai/nlp/rank-priority-real/**",
-        "/api/workflow-ai/nlp/detect-anomalies/**",
+        "/api/workflow-ai/models/offline-data"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 5,
+        "maxAge": "1h",
+        "timeout": "15s"
+      }
+    },
+    {
+      "name": "tf-predictions",
+      "urls": [
         "/api/workflow-ai/nlp/predict-delay/**",
         "/api/workflow-ai/nlp/predict-bottleneck/**",
-        "/api/workflow-ai/nlp/rank-priority-real"
+        "/api/workflow-ai/nlp/rank-priority-real/**",
+        "/api/workflow-ai/nlp/detect-anomalies/**"
       ],
       "cacheConfig": {
         "strategy": "freshness",
         "maxSize": 100,
-        "maxAge": "7d",
+        "maxAge": "10m",
         "timeout": "10s"
       }
     },
     {
-      "name": "tensorflow-nlp",
-      "urls": [
-        "/api/workflow-ai/nlp/fill-form",
-        "/api/workflow-ai/nlp/match-with-docs",
-        "/api/workflow-ai/nlp/workflow-requirements",
-        "/api/workflow-ai/nlp/report-generate"
-      ],
-      "cacheConfig": {
-        "strategy": "freshness",
-        "maxSize": 50,
-        "maxAge": "1d",
-        "timeout": "10s"
-      }
-    },
-    {
-      "name": "api-data",
+      "name": "api-core",
       "urls": [
         "/api/workflows",
         "/api/workflows/**",
-        "/api/tramites/**",
+        "/api/departments/**",
         "/api/users/**",
-        "/api/departments/**"
+        "/api/tramites/**",
+        "/api/activities/**"
       ],
       "cacheConfig": {
         "strategy": "freshness",
-        "maxSize": 200,
-        "maxAge": "1d",
+        "maxSize": 500,
+        "maxAge": "30m",
+        "timeout": "10s"
+      }
+    },
+    {
+      "name": "tf-nlp-static",
+      "urls": [
+        "/api/workflow-ai/nlp/workflow-requirements"
+      ],
+      "cacheConfig": {
+        "strategy": "freshness",
+        "maxSize": 10,
+        "maxAge": "1h",
         "timeout": "10s"
       }
     }

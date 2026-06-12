@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal, OnInit, OnDestroy } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import { AuthService } from '../core/services/auth.service';
+import { TfOfflineService } from '../core/services/tf-offline.service';
 
 @Component({
   selector: 'app-shell',
@@ -18,12 +19,23 @@ import { AuthService } from '../core/services/auth.service';
     MatButtonModule, MatMenuModule
   ],
   template: `
-    <mat-sidenav-container class="h-screen bg-slate-100">
+    <!-- Offline banner -->
+    @if (!online()) {
+      <div class="fixed inset-x-0 top-0 z-[9999] flex items-center justify-center gap-2 bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+        <mat-icon class="!text-[18px]">wifi_off</mat-icon>
+        Sin conexión — mostrando datos en caché. Los modelos TensorFlow siguen funcionando.
+      </div>
+    }
+
+    <mat-sidenav-container class="h-screen bg-slate-100" [class.mt-9]="!online()">
       <mat-sidenav mode="side" opened class="w-[260px] border-r border-slate-800 bg-slate-900 text-white">
         <div class="flex h-full flex-col">
           <div class="flex items-center gap-3 border-b border-white/10 px-4 py-5 text-base font-bold">
             <mat-icon class="text-indigo-500">account_tree</mat-icon>
             <span>Workflow Manager</span>
+            @if (!online()) {
+              <mat-icon class="ml-auto !text-[16px] text-amber-400" title="Sin conexión">wifi_off</mat-icon>
+            }
           </div>
 
           <mat-nav-list class="flex-1 pt-2">
@@ -93,12 +105,27 @@ import { AuthService } from '../core/services/auth.service';
             }
           </mat-nav-list>
 
+          <!-- TF cache status -->
+          <div class="border-t border-white/10 px-4 py-2">
+            @if (tfReady()) {
+              <div class="flex items-center gap-1.5 text-xs text-green-400">
+                <mat-icon class="!text-[14px]">offline_bolt</mat-icon>
+                Modelos TF en caché
+              </div>
+            } @else {
+              <div class="flex items-center gap-1.5 text-xs text-white/30">
+                <mat-icon class="!text-[14px]">cloud_download</mat-icon>
+                Descargando modelos TF…
+              </div>
+            }
+          </div>
+
           <div class="flex items-center justify-between border-t border-white/10 px-4 py-3">
             <div class="flex items-center gap-2">
               <mat-icon class="text-white/50">person</mat-icon>
               <div>
-                <p class="text-sm font-semibold text-black">{{ auth.user()?.name || auth.user()?.email }}</p>
-                <p class="text-xs text-black/50">{{ auth.user()?.jobRoleName || auth.user()?.role }}</p>
+                <p class="text-sm font-semibold text-white">{{ auth.user()?.name || auth.user()?.email }}</p>
+                <p class="text-xs text-white/50">{{ auth.user()?.jobRoleName || auth.user()?.role }}</p>
               </div>
             </div>
             <button mat-icon-button (click)="auth.logout()" title="Cerrar sesión" class="text-white/50">
@@ -114,6 +141,28 @@ import { AuthService } from '../core/services/auth.service';
     </mat-sidenav-container>
   `
 })
-export class ShellComponent {
-  auth = inject(AuthService);
+export class ShellComponent implements OnInit, OnDestroy {
+  auth    = inject(AuthService);
+  tfSvc   = inject(TfOfflineService);
+  online  = signal(navigator.onLine);
+  tfReady = signal(false);
+
+  private _onOnline  = () => this.online.set(true);
+  private _onOffline = () => this.online.set(false);
+
+  ngOnInit(): void {
+    window.addEventListener('online',  this._onOnline);
+    window.addEventListener('offline', this._onOffline);
+    // Poll TF ready status (models take a few seconds to load)
+    const check = () => {
+      if (this.tfSvc.isReady()) { this.tfReady.set(true); return; }
+      setTimeout(check, 2000);
+    };
+    setTimeout(check, 1000);
+  }
+
+  ngOnDestroy(): void {
+    window.removeEventListener('online',  this._onOnline);
+    window.removeEventListener('offline', this._onOffline);
+  }
 }

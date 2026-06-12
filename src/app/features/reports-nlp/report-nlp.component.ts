@@ -15,6 +15,9 @@ const COLUMN_LABELS: Record<string, string> = {
   status:         'Estado',
   userName:       'Usuario',
   createdAt:      'Fecha',
+  total:          'Total Trámites',
+  avgMinutes:     'Tiempo Prom. (min)',
+  count:          'Cantidad',
 };
 
 interface ReportResult {
@@ -25,6 +28,7 @@ interface ReportResult {
     orderBy: string;
     format: string;
     columns: string[];
+    intent?: string;
   };
   data: Record<string, any>[];
   total: number;
@@ -47,12 +51,12 @@ interface ReportResult {
       <!-- Header -->
       <div>
         <h2 class="m-0 text-2xl font-bold text-slate-800">Reportes</h2>
-      
       </div>
 
       <!-- Input card -->
       <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div class="mb-4 flex gap-3">
+
           <!-- Mic -->
           <button
             class="flex h-12 w-12 shrink-0 items-center justify-center rounded-full shadow transition"
@@ -68,7 +72,7 @@ interface ReportResult {
           <textarea
             class="flex-1 resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:outline-none"
             rows="3"
-            placeholder='Ej: "reporte del departamento técnico entre enero y marzo en excel, agrupado por workflow" o "todos los trámites pendientes de este mes en pantalla ordenado por fecha"'
+            placeholder='Ej: "quiero ver el trámite TRM00004" | "todos los trámites del 10 de junio del 2026" | "departamentos con mayor flujo ordenado ascendentemente" | "tiempo promedio que el departamento Legal resuelve el workflow Instalacion de Medidor"'
             [(ngModel)]="prompt">
           </textarea>
         </div>
@@ -76,7 +80,7 @@ interface ReportResult {
         @if (recording()) {
           <p class="mb-3 flex items-center gap-1.5 text-xs text-rose-500">
             <span class="h-2 w-2 animate-pulse rounded-full bg-rose-500"></span>
-            Grabando… hablá ahora
+            Grabando… hablá y el reporte se generará automáticamente al terminar
           </p>
         }
 
@@ -113,7 +117,7 @@ interface ReportResult {
 
       <!-- Resultado -->
       @if (result()) {
-        <!-- Spec summary -->
+        <!-- Spec summary chips -->
         <div class="flex flex-wrap gap-2">
           <span class="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-600">
             {{ result()!.total }} resultado(s)
@@ -130,7 +134,7 @@ interface ReportResult {
           }
         </div>
 
-        <!-- Tabla -->
+        <!-- Table -->
         @if (result()!.data.length) {
           <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div class="flex items-center border-b border-slate-100 bg-slate-50 px-5 py-3">
@@ -183,7 +187,7 @@ interface ReportResult {
 export class ReportNlpComponent implements OnDestroy {
   private recognition: any = null;
 
-  prompt   = '';
+  prompt    = '';
   recording = signal(false);
   loading   = signal(false);
   result    = signal<ReportResult | null>(null);
@@ -202,10 +206,20 @@ export class ReportNlpComponent implements OnDestroy {
     this.recognition = new SR();
     this.recognition.lang = 'es-ES';
     this.recognition.continuous = false;
-    this.recognition.interimResults = true;
+    this.recognition.interimResults = false;
+
     this.recognition.onresult = (e: any) => {
-      this.prompt = Array.from(e.results).map((r: any) => r[0].transcript).join(' ').trim();
+      const transcript = Array.from(e.results as any[])
+        .filter((r: any) => r.isFinal)
+        .map((r: any) => r[0].transcript)
+        .join(' ')
+        .trim();
+      if (transcript) {
+        this.prompt = '';
+        this._executePrompt(transcript);
+      }
     };
+
     this.recognition.onerror = () => this.recording.set(false);
     this.recognition.onend   = () => this.recording.set(false);
     this.recognition.start();
@@ -219,13 +233,17 @@ export class ReportNlpComponent implements OnDestroy {
 
   generate() {
     if (!this.prompt.trim()) return;
+    this._executePrompt(this.prompt.trim());
+  }
+
+  private _executePrompt(text: string) {
     this.loading.set(true);
     this.error.set('');
     this.result.set(null);
 
     this.http.post(
       `${environment.apiUrl}/workflow-ai/nlp/report-generate`,
-      { prompt: this.prompt.trim() },
+      { prompt: text },
       { responseType: 'blob', observe: 'response' }
     ).subscribe({
       next: (response) => {
@@ -234,20 +252,18 @@ export class ReportNlpComponent implements OnDestroy {
         const blob = response.body!;
 
         if (contentType.includes('application/json')) {
-          // Pantalla: parsear JSON y mostrar tabla
-          blob.text().then(text => {
-            const res: ReportResult = JSON.parse(text);
+          blob.text().then(raw => {
+            const res: ReportResult = JSON.parse(raw);
             if (res.spec.groupBy && res.data.length) {
               res.data = this.flattenGroups(res.data, res.spec.groupBy);
             }
             this.result.set(res);
           });
         } else {
-          // Word o Excel: descargar automáticamente
           const isWord = contentType.includes('wordprocessingml');
-          const ext = isWord ? 'docx' : 'xlsx';
-          const url = URL.createObjectURL(blob);
-          const a   = document.createElement('a');
+          const ext    = isWord ? 'docx' : 'xlsx';
+          const url    = URL.createObjectURL(blob);
+          const a      = document.createElement('a');
           a.href = url; a.download = `reporte.${ext}`; a.click();
           URL.revokeObjectURL(url);
         }
@@ -277,7 +293,7 @@ export class ReportNlpComponent implements OnDestroy {
     const labelMap: Record<string, string> = {
       departmentName: 'Departamento', workflowName: 'Workflow',
       userName: 'Usuario', status: 'Estado',
-      dateFrom: 'Desde', dateTo: 'Hasta',
+      dateFrom: 'Desde', dateTo: 'Hasta', code: 'Código',
     };
     return Object.entries(this.result()?.spec.filters ?? {})
       .filter(([, v]) => v)
@@ -290,8 +306,13 @@ export class ReportNlpComponent implements OnDestroy {
 
   formatCell(row: Record<string, any>, col: string): string {
     const val = row[col];
-    if (!val) return '—';
+    if (val === null || val === undefined || val === '') return '—';
     if (col === 'createdAt') return String(val).substring(0, 10);
+    if (col === 'avgMinutes') {
+      const m = Number(val);
+      if (m >= 60) return `${(m / 60).toFixed(1)} h`;
+      return `${m} min`;
+    }
     return String(val);
   }
 
